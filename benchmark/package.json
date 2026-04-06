@@ -1,0 +1,17 @@
+{
+  "type": "module",
+  "scripts": {
+    "toml": "hyperfine --warmup 5 --runs 10 'node toml.min.mjs' 'node toml.mjs'",
+    "toml-eslint-parser": "hyperfine --warmup 5 --runs 10 'node toml.min.mjs' 'node toml-eslint-parser.mjs'",
+    "smol-toml": "hyperfine --warmup 5 --runs 10 'node toml.min.mjs' 'node smol-toml.mjs'",
+    "toml-patch": "hyperfine --warmup 5 --runs 10 'node toml.min.mjs' 'node toml-patch.mjs'",
+    "benchmark": "npm run toml && npm run toml-eslint-parser && npm run smol-toml && npm run toml-patch"
+  },
+  "dependencies": {
+    "@decimalturn/toml-patch": "^1.0.5",
+    "smol-toml": "^1.6.1",
+    "toml": "^4.1.1",
+    "toml-eslint-parser": "^1.0.3",
+    "toml.min": "file:.."
+  }
+}

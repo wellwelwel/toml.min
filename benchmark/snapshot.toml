@@ -1,0 +1,248 @@
+# Comprehensive TOML benchmark snapshot
+
+title = "Benchmark Snapshot"
+version = 1
+
+# ── Strings ──────────────────────────────────────────────────
+
+[strings]
+basic = "Hello, World!"
+empty = ""
+escape_tab = "col1\tcol2\tcol3"
+escape_newline = "line1\nline2\nline3"
+escape_cr = "before\r\nafter"
+escape_backslash = "C:\\Users\\admin\\docs"
+escape_quote = "She said \"hello\""
+escape_backspace = "back\bspace"
+escape_formfeed = "form\ffeed"
+escape_unicode_short = "\u0048\u0069"
+unicode_u = "\u0048\u0065\u006C\u006C\u006F"
+unicode_U = "\U00000048\U00000065\U0000006C\U0000006C\U0000006F"
+multiline_basic = """
+Roses are red
+Violets are blue
+TOML is great
+And so are you"""
+multiline_trimmed = """\
+    The quick brown \
+    fox jumps over \
+    the lazy dog."""
+literal = 'C:\Users\admin\no\escapes'
+literal_empty = ''
+multiline_literal = '''
+first line
+second line
+third line'''
+
+# ── Integers ─────────────────────────────────────────────────
+
+[integers]
+positive = 42
+negative = -17
+zero = 0
+plus_zero = +0
+large = 1_000_000
+hex_lower = 0xdeadbeef
+hex_upper = 0xDEADBEEF
+hex_mixed = 0xDeAd_BeEf
+octal = 0o755
+octal_underscore = 0o7_5_5
+binary = 0b11010110
+binary_underscore = 0b1101_0110
+
+# ── Floats ───────────────────────────────────────────────────
+
+[floats]
+pi = 3.14159265358979
+negative = -0.001
+exponent_pos = 5e+22
+exponent_neg = 1e-7
+exponent_both = 6.626e-34
+underscore = 9_224_617.445_991_228
+pos_inf = inf
+neg_inf = -inf
+pos_nan = nan
+neg_nan = -nan
+
+# ── Booleans ─────────────────────────────────────────────────
+
+[booleans]
+yes = true
+no = false
+
+# ── Date/Time ────────────────────────────────────────────────
+
+[dates]
+odt_zulu = 1979-05-27T07:32:00Z
+odt_offset_neg = 1979-05-27T07:32:00-05:00
+odt_offset_pos = 2024-12-25T12:00:00+09:00
+odt_frac = 1979-05-27T07:32:00.999999+00:00
+odt_space = 1979-05-27 07:32:00Z
+local_datetime = 1979-05-27T07:32:00
+local_datetime_frac = 1979-05-27T07:32:00.123
+local_date = 1979-05-27
+local_time = 07:32:00
+local_time_frac = 07:32:00.999
+
+# ── Arrays ───────────────────────────────────────────────────
+
+[arrays]
+empty = []
+integers = [1, 2, 3, 4, 5]
+strings = ["alpha", "beta", "gamma", "delta"]
+floats = [1.1, 2.2, 3.3]
+booleans = [true, false, true]
+nested = [[1, 2], [3, 4], [5, 6]]
+deep_nested = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+multiline = [
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+]
+mixed_types = [[1, 2], ["a", "b"]]
+dates = [1979-05-27T07:32:00Z, 2024-01-01T00:00:00Z]
+
+# ── Tables ───────────────────────────────────────────────────
+
+[server]
+host = "localhost"
+port = 8080
+enabled = true
+
+[server.metadata]
+region = "us-east-1"
+zone = "a"
+tags = ["web", "production", "v2"]
+
+[server.metadata.limits]
+max_connections = 1000
+timeout_ms = 30_000
+
+[server.tls]
+enabled = true
+cert_path = '/etc/ssl/certs/server.pem'
+key_path = '/etc/ssl/private/server.key'
+
+# ── Dotted Keys ──────────────────────────────────────────────
+
+[dotted]
+a.b.c = "deep value"
+x.y = 42
+"quoted.key".nested = true
+name = "plain"
+
+# ── Inline Tables ────────────────────────────────────────────
+
+[inline]
+point = { x = 1, y = 2, z = 3 }
+person = { name = "Tom", age = 30, active = true }
+empty_table = {}
+nested_inline = { a = { b = "c" } }
+with_array = { tags = ["a", "b", "c"] }
+
+# ── Array of Tables ──────────────────────────────────────────
+
+[[products]]
+name = "Hammer"
+sku = 738594937
+color = "red"
+price = 9.99
+in_stock = true
+
+[[products]]
+name = "Nail"
+sku = 284758393
+color = "grey"
+price = 0.05
+in_stock = true
+
+[[products]]
+name = "Screwdriver"
+sku = 473625193
+color = "blue"
+price = 12.50
+in_stock = false
+
+[[products]]
+name = "Wrench"
+sku = 109384756
+color = "silver"
+price = 15.00
+in_stock = true
+
+# ── Nested Array of Tables ───────────────────────────────────
+
+[[fruits]]
+name = "apple"
+
+    [[fruits.varieties]]
+    name = "red delicious"
+    origin = "USA"
+
+    [[fruits.varieties]]
+    name = "granny smith"
+    origin = "Australia"
+
+    [[fruits.varieties]]
+    name = "fuji"
+    origin = "Japan"
+
+[[fruits]]
+name = "banana"
+
+    [[fruits.varieties]]
+    name = "plantain"
+    origin = "Central America"
+
+    [[fruits.varieties]]
+    name = "cavendish"
+    origin = "Southeast Asia"
+
+[[fruits]]
+name = "cherry"
+
+    [[fruits.varieties]]
+    name = "bing"
+    origin = "USA"
+
+# ── Complex Nested Structure ─────────────────────────────────
+
+[database]
+server = "192.168.1.1"
+ports = [8001, 8002, 8003]
+connection_max = 5000
+connection_min = -2
+enabled = true
+
+[database.credentials]
+username = "admin"
+password = "s3cr3t"
+
+[database.options]
+retry_count = 3
+retry_delay_ms = 1_000
+ssl = true
+pool_size = 10
+
+# ── Edge Cases ───────────────────────────────────────────────
+
+[edge_cases]
+"unicode_key_τεστ" = "greek"
+"key with spaces" = "works"
+"" = "empty key"
+"key.with.dots" = "dotted string key"
+long_string = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+
+# ── Comments everywhere ──────────────────────────────────────
+
+# This is a full-line comment
+[comments] # inline comment on table header
+key1 = "value1" # inline comment on value
+key2 = 42 # another inline comment
+key3 = [  # comment in array
+    1, # first
+    2, # second
+    3, # third
+]

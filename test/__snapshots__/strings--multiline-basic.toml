@@ -1,0 +1,5 @@
+key1 = "One\nTwo"
+key2 = """One\nTwo"""
+key3 = """
+One
+Two"""

@@ -1,0 +1,2 @@
+benchmark/** linguist-vendored
+test/__snapshots__/*crlf*.toml -text

@@ -1,0 +1,14 @@
+{
+  "include": ["../src/**/*.ts", "**/**/*.mts"],
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "target": "esnext",
+    "lib": ["esnext"],
+    "types": ["node"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "rootDir": "../",
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  }
+}
