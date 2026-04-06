@@ -56,6 +56,4 @@ jobs:
 
       - name: 📥 Publishing Package
         if: ${{ steps.release.outputs.releases_created }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance
