@@ -1,6 +1,6 @@
 {
   "name": "toml.min",
-  "version": "0.1.3",
+  "version": "1.0.0",
   "description": "🔧 Faster and lightweight TOML v1.1.0 parser for JavaScript and TypeScript.",
   "main": "./lib/index.js",
   "license": "MIT",
