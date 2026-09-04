@@ -10,7 +10,7 @@
   "dependencies": {
     "@decimalturn/toml-patch": "^1.0.5",
     "smol-toml": "^1.6.1",
-    "toml": "^4.1.1",
+    "toml": "^4.2.0",
     "toml-eslint-parser": "^1.0.3",
     "toml.min": "file:.."
   }
