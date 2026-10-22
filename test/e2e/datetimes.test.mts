@@ -66,6 +66,19 @@ describe('Datetimes', () => {
       ),
     }));
 
+  it('applies the offset of a date-time delimited by a space', () =>
+    assertParsesTo('a = 1979-05-27 07:32:00+05:30', {
+      a: new OffsetDateTime(
+        '1979-05-27T02:02:00Z',
+        '1979-05-27 07:32:00+05:30'
+      ),
+    }));
+
+  it('reads an offset date-time written without seconds', () =>
+    assertParsesTo('a = 1979-05-27T07:32Z', {
+      a: new OffsetDateTime('1979-05-27T07:32:00Z', '1979-05-27T07:32Z'),
+    }));
+
   it('keeps a fraction finer than a millisecond in the text', () =>
     assertParsesTo('a = 1979-05-27T07:32:00.123456789Z', {
       a: new OffsetDateTime(
@@ -195,6 +208,16 @@ describe('Date validation', () => {
     {
       name: 'a date-time followed by an incomplete offset',
       fixture: 'date-validation--incomplete-offset.toml',
+      code: 'EXPECTED_NEWLINE',
+    },
+    {
+      name: 'a date with a one-digit month',
+      fixture: 'date-validation--one-digit-month.toml',
+      code: 'EXPECTED_NEWLINE',
+    },
+    {
+      name: 'a time with a one-digit minute',
+      fixture: 'date-validation--one-digit-minute.toml',
       code: 'EXPECTED_NEWLINE',
     },
   ];

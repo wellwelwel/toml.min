@@ -223,6 +223,9 @@ describe('Error message echoes', () => {
     it(`shows the ${name} as ${label}`, () =>
       strict.ok(messageOf(duplicated(key)).includes(`"x[${label}]y"`)));
 
+  it('quotes a key that contains a dot apart from the dots between keys', () =>
+    strict.ok(messageOf(duplicated('a."b.c"')).includes(`"a.'b.c'"`)));
+
   it('keeps visible characters as typed', () =>
     strict.ok(messageOf(duplicated('"café ☕ 🎉"')).includes('"café ☕ 🎉"')));
 
