@@ -309,13 +309,13 @@ The generic is not checked at runtime, so validate data from files you don't con
 
 Measured with [**hyperfine**](https://github.com/sharkdp/hyperfine) parsing the same **TOML** payload:
 
-| Parser                                                                | Times slower than **toml.min** | Package Size                                           |
-| --------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------ |
-| ✨ **toml.min**                                                       | **1.00x** _(baseline)_         | <img src="https://pkg-size.dev/badge/install/48737" >  |
-| [smol-toml](https://github.com/squirrelchat/smol-toml)                | 1.15x ↓                        | <img src="https://pkg-size.dev/badge/install/103432">  |
-| [toml-eslint-parser](https://github.com/ota-meshi/toml-eslint-parser) | 4.12x ↓                        | <img src="https://pkg-size.dev/badge/install/118432" > |
-| [@decimalturn/toml-patch](https://github.com/DecimalTurn/toml-patch)  | 4.82x ↓                        | <img src="https://pkg-size.dev/badge/install/102278" > |
-| [toml](https://github.com/BinaryMuse/toml-node)                       | 6.94x ↓                        | <img src="https://pkg-size.dev/badge/install/123966" > |
+| Parser                                                                        | Times slower than **toml.min** |
+| ----------------------------------------------------------------------------- | ------------------------------ |
+| ✨ **toml.min** `1.0.0`                                                       | **1.00x** _(baseline)_         |
+| [smol-toml](https://github.com/squirrelchat/smol-toml) `1.9.1`                | 1.11x ↓                        |
+| [toml-eslint-parser](https://github.com/ota-meshi/toml-eslint-parser) `1.0.3` | 5.90x ↓                        |
+| [@decimalturn/toml-patch](https://github.com/DecimalTurn/toml-patch) `3.3.1`  | 6.95x ↓                        |
+| [toml](https://github.com/BinaryMuse/toml-node) `5.0.1`                       | 9.21x ↓                        |
 
 - Each benchmark parses the same **TOML** snapshot **5,000 times** per run, with **10 measured runs** and **5 warmup runs** via [**hyperfine**](https://github.com/sharkdp/hyperfine). See the [**benchmark**](https://github.com/wellwelwel/toml.min/tree/main/benchmark) directory for details.
 
