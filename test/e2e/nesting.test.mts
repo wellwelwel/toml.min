@@ -5,6 +5,7 @@ import { parse } from '../__helpers__/index.mts';
 type NestingSource = { name: string; build: (levels: number) => string };
 
 const DEFAULT_LIMIT = 100;
+const STACK_EXHAUSTING_LEVELS = 100_000;
 
 const keyPath = (parts: number): string =>
   Array.from({ length: parts }, () => 'a').join('.');
@@ -13,6 +14,28 @@ const treeDepth = (value: unknown): number => {
   if (value === null || typeof value !== 'object') return 0;
 
   return 1 + Math.max(0, ...Object.values(value).map(treeDepth));
+};
+
+const takesLimit = (limit: number): boolean => {
+  try {
+    parse('', { maxDepth: limit });
+
+    return true;
+  } catch (error) {
+    if (error instanceof TypeError) return false;
+
+    throw error;
+  }
+};
+
+const highestTakenLimit = (taken: number, refused: number): number => {
+  if (refused - taken === 1) return taken;
+
+  const middle = taken + Math.floor((refused - taken) / 2);
+
+  return takesLimit(middle)
+    ? highestTakenLimit(middle, refused)
+    : highestTakenLimit(taken, middle);
 };
 
 describe('Nesting depth', () => {
@@ -38,6 +61,10 @@ describe('Nesting depth', () => {
       build: (levels) => `[[${keyPath(levels - 1)}]]`,
     },
   ];
+  const highestLimit = highestTakenLimit(
+    DEFAULT_LIMIT,
+    STACK_EXHAUSTING_LEVELS + 1
+  );
 
   for (const source of sources) {
     it(`accepts ${source.name} nested ${DEFAULT_LIMIT} levels deep by default`, () =>
@@ -51,6 +78,17 @@ describe('Nesting depth', () => {
         name: 'TomlError',
         code: 'NESTING_TOO_DEEP',
       }));
+
+    it(`accepts ${source.name} nested as deep as the highest limit allowed`, () =>
+      strict.doesNotThrow(() =>
+        parse(source.build(highestLimit), { maxDepth: highestLimit })
+      ));
+
+    it(`rejects ${source.name} nested one level past the highest limit allowed`, () =>
+      strict.throws(
+        () => parse(source.build(highestLimit + 1), { maxDepth: highestLimit }),
+        { name: 'TomlError', code: 'NESTING_TOO_DEEP' }
+      ));
   }
 
   it('rejects a million opening brackets at the first one past the limit', () =>

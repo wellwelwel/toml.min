@@ -11,6 +11,13 @@ import {
 
 type LocalForm = { source: string; kind: LocalDateOrTimeKind; text: string };
 
+type FractionCase = {
+  name: string;
+  withoutSeconds: string;
+  withSeconds: string;
+  parsed: Record<string, unknown>;
+};
+
 describe('Datetimes', () => {
   it('reads a UTC date-time as a Date', () =>
     assertParsesTo(read('datetimes--utc.toml'), {
@@ -221,6 +228,50 @@ describe('Date validation', () => {
       code: 'EXPECTED_NEWLINE',
     },
   ];
+  const fractions: FractionCase[] = [
+    {
+      name: 'a local time',
+      withoutSeconds: 'a = 07:32.5',
+      withSeconds: 'a = 07:32:00.5',
+      parsed: { a: new LocalDateOrTime('time', '07:32:00.5') },
+    },
+    {
+      name: 'a local date-time',
+      withoutSeconds: 'a = 1979-05-27T07:32.5',
+      withSeconds: 'a = 1979-05-27T07:32:00.5',
+      parsed: { a: new LocalDateOrTime('date-time', '1979-05-27T07:32:00.5') },
+    },
+    {
+      name: 'an offset date-time',
+      withoutSeconds: 'a = 1979-05-27T07:32.5Z',
+      withSeconds: 'a = 1979-05-27T07:32:00.5Z',
+      parsed: {
+        a: new OffsetDateTime(
+          '1979-05-27T07:32:00.5Z',
+          '1979-05-27T07:32:00.5Z'
+        ),
+      },
+    },
+    {
+      name: 'a local time inside an array',
+      withoutSeconds: 'a = [07:32.5]',
+      withSeconds: 'a = [07:32:00.5]',
+      parsed: { a: [new LocalDateOrTime('time', '07:32:00.5')] },
+    },
+    {
+      name: 'an offset date-time inside an inline table',
+      withoutSeconds: 'a = { b = 1979-05-27 07:32.5+05:30 }',
+      withSeconds: 'a = { b = 1979-05-27 07:32:00.5+05:30 }',
+      parsed: {
+        a: {
+          b: new OffsetDateTime(
+            '1979-05-27T02:02:00.5Z',
+            '1979-05-27 07:32:00.5+05:30'
+          ),
+        },
+      },
+    },
+  ];
 
   it('accepts February 29 in a leap year', () =>
     assertParsesTo(read('date-validation--feb-29-leap.toml'), {
@@ -235,4 +286,10 @@ describe('Date validation', () => {
   for (const { name, fixture, code } of rejections)
     it(`rejects ${name}`, () =>
       strict.throws(() => parse(read(fixture)), { name: 'TomlError', code }));
+
+  for (const { name, withoutSeconds, withSeconds, parsed } of fractions)
+    it(`accepts a fraction of a second in ${name} only after the seconds`, () => {
+      strict.throws(() => parse(withoutSeconds), { name: 'TomlError' });
+      assertParsesTo(withSeconds, parsed);
+    });
 });

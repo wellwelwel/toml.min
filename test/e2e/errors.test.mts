@@ -21,6 +21,8 @@ type FoundCase = {
   label: string;
 };
 
+type EchoCase = { name: string; source: string; quoted: string };
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MESSAGE_LIMIT = 300;
 const HIDDEN = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
@@ -200,6 +202,34 @@ describe('Error message echoes', () => {
       label: 'U+D800',
     },
   ];
+  const echoCases: EchoCase[] = [
+    {
+      name: 'quote marks in a key set twice',
+      source: duplicated(`'x" and "y'`),
+      quoted: '"x\\" and \\"y"',
+    },
+    {
+      name: 'a backslash ending a key set twice',
+      source: duplicated(`'x\\'`),
+      quoted: '"x\\\\"',
+    },
+    {
+      name: 'quote marks in a table defined twice',
+      source: `['x" and "y']\n['x" and "y']`,
+      quoted: '"x\\" and \\"y"',
+    },
+    {
+      name: 'a quote mark found where a line should end',
+      source: 'a = 1 "',
+      quoted: '"\\""',
+    },
+    {
+      name: 'a backslash found where a line should end',
+      source: 'a = 1 \\',
+      quoted: '"\\\\"',
+    },
+    { name: 'an unknown escape', source: 'a = "\\q"', quoted: '"\\\\q"' },
+  ];
 
   it('clips a 200,000-character key with a visible mark', () => {
     const key = 'k'.repeat(200_000);
@@ -235,4 +265,11 @@ describe('Error message echoes', () => {
       strict.ok(!HIDDEN.test(message), message);
     }
   });
+
+  for (const { name, source, quoted } of echoCases)
+    it(`keeps ${name} inside the quotes of its echo`, () => {
+      const message = messageOf(source);
+
+      strict.ok(message.includes(quoted), message);
+    });
 });
