@@ -90,6 +90,14 @@ describe('Number validation', () => {
       code: 'INVALID_NUMBER',
     },
   ];
+  const signedPrefixedIntegers = [
+    '+0x1F',
+    '-0x1F',
+    '+0o17',
+    '-0o17',
+    '+0b1',
+    '-0b1',
+  ];
 
   it('reads 0 with an exponent', () =>
     assertParsesTo(read('number-validation--float-zero-exponent.toml'), {
@@ -99,6 +107,15 @@ describe('Number validation', () => {
   for (const { name, fixture, code } of rejections)
     it(`rejects ${name}`, () =>
       strict.throws(() => parse(read(fixture)), { name: 'TomlError', code }));
+
+  for (const integer of signedPrefixedIntegers)
+    it(`rejects the sign in ${integer}, which only decimal numbers allow`, () =>
+      strict.throws(() => parse(`a = ${integer}`), {
+        name: 'TomlError',
+        code: 'INVALID_NUMBER',
+        line: 1,
+        column: 5,
+      }));
 });
 
 describe('Integer range', () => {

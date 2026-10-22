@@ -1,8 +1,55 @@
+import type { TomlErrorCode } from '../../src/index.ts';
 import type { Rejection } from '../__helpers__/index.mts';
 import { describe, it, strict } from 'poku';
 import { assertParsesTo, parse, read } from '../__helpers__/index.mts';
 
+type SourceRejection = { name: string; source: string; code: TomlErrorCode };
+
 describe('Edge cases', () => {
+  const loneCarriageReturns: SourceRejection[] = [
+    {
+      name: 'between two keys',
+      source: 'a = 1\rb = 2',
+      code: 'EXPECTED_NEWLINE',
+    },
+    { name: 'before a key', source: '\ra = 1', code: 'INVALID_KEY' },
+    {
+      name: 'inside a comment',
+      source: '# note\ra = 1',
+      code: 'CONTROL_CHARACTER',
+    },
+    {
+      name: 'inside a basic string',
+      source: 'a = "x\ry"',
+      code: 'CONTROL_CHARACTER',
+    },
+    {
+      name: 'inside a literal string',
+      source: "a = 'x\ry'",
+      code: 'CONTROL_CHARACTER',
+    },
+    {
+      name: 'inside a multiline basic string',
+      source: 'a = """x\ry"""',
+      code: 'CONTROL_CHARACTER',
+    },
+    {
+      name: 'inside a multiline literal string',
+      source: "a = '''x\ry'''",
+      code: 'CONTROL_CHARACTER',
+    },
+    {
+      name: 'after a line-ending backslash',
+      source: 'a = """x\\\ry"""',
+      code: 'CONTROL_CHARACTER',
+    },
+    {
+      name: 'between array items',
+      source: 'a = [1,\r2]',
+      code: 'EXPECTED_VALUE',
+    },
+  ];
+
   it('reads an empty document as an empty table', () =>
     assertParsesTo(read('edge-cases--empty-input.toml'), {}));
 
@@ -42,6 +89,13 @@ describe('Edge cases', () => {
     assertParsesTo(read('edge-cases--crlf-multiline-literal-start.toml'), {
       a: 'hello',
     }));
+
+  it('accepts CRLF right after a comment', () =>
+    assertParsesTo('a = 1 # note\r\n# full line\r\nb = 2', { a: 1, b: 2 }));
+
+  for (const { name, source, code } of loneCarriageReturns)
+    it(`rejects a carriage return without a line feed ${name}`, () =>
+      strict.throws(() => parse(source), { name: 'TomlError', code }));
 
   it('reads a value on the last line without a newline', () =>
     assertParsesTo(read('edge-cases--no-trailing-newline.toml'), { a: 1 }));

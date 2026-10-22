@@ -1,9 +1,31 @@
-export type MetaNode = {
+export interface MetaNode {
   assigned: boolean;
-  holdsValue: boolean;
   explicit: boolean;
   tableArray: boolean;
   children: Record<string, MetaNode>;
+}
+
+export type DigitRule = {
+  radix: number;
+  isAllowedDigit: (code: number) => boolean;
+  digitName: string;
+};
+
+export type ParserState = {
+  source: string;
+  length: number;
+  position: number;
+  maxDepth: number;
+  bigint: boolean;
+  allowUnsafeKeys: boolean;
+  root: Record<string, unknown>;
+  metaRoot: MetaNode;
+  context: Record<string, unknown>;
+  contextKeys: string[];
+  contextMeta: MetaNode;
+  contextDepth: number;
+  lastKeyOffset: number;
+  dottedInlineTables: Set<unknown> | undefined;
 };
 
 export type ParseOptions = {

@@ -312,10 +312,10 @@ Measured with [**hyperfine**](https://github.com/sharkdp/hyperfine) parsing the 
 | Parser                                                                | Times slower than **toml.min** | Package Size                                           |
 | --------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------ |
 | ✨ **toml.min**                                                       | **1.00x** _(baseline)_         | <img src="https://pkg-size.dev/badge/install/48737" >  |
-| [smol-toml](https://github.com/nicolo-ribaudo/smol-toml)              | 1.39x ↓                        | <img src="https://pkg-size.dev/badge/install/103432">  |
-| [toml-eslint-parser](https://github.com/ota-meshi/toml-eslint-parser) | 2.95x ↓                        | <img src="https://pkg-size.dev/badge/install/118432" > |
-| [@decimalturn/toml-patch](https://github.com/DecimalTurn/toml-patch)  | 3.43x ↓                        | <img src="https://pkg-size.dev/badge/install/102278" > |
-| [toml](https://github.com/BinaryMuse/toml-node)                       | 6.42x ↓                        | <img src="https://pkg-size.dev/badge/install/123966" > |
+| [smol-toml](https://github.com/squirrelchat/smol-toml)                | 1.15x ↓                        | <img src="https://pkg-size.dev/badge/install/103432">  |
+| [toml-eslint-parser](https://github.com/ota-meshi/toml-eslint-parser) | 4.12x ↓                        | <img src="https://pkg-size.dev/badge/install/118432" > |
+| [@decimalturn/toml-patch](https://github.com/DecimalTurn/toml-patch)  | 4.82x ↓                        | <img src="https://pkg-size.dev/badge/install/102278" > |
+| [toml](https://github.com/BinaryMuse/toml-node)                       | 6.94x ↓                        | <img src="https://pkg-size.dev/badge/install/123966" > |
 
 - Each benchmark parses the same **TOML** snapshot **5,000 times** per run, with **10 measured runs** and **5 warmup runs** via [**hyperfine**](https://github.com/sharkdp/hyperfine). See the [**benchmark**](https://github.com/wellwelwel/toml.min/tree/main/benchmark) directory for details.
 
