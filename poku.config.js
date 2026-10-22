@@ -2,6 +2,7 @@ const { coverage } = require('@pokujs/monocart');
 const { defineConfig } = require('poku');
 
 module.exports = defineConfig({
+  reporter: 'compact',
   plugins: [
     coverage({
       requireFlag: true,

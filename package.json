@@ -24,9 +24,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "poku -r=compact",
-    "test:bun": "bun --bun poku -r=compact",
-    "test:deno": "deno run -A npm:poku -r=compact",
+    "test": "poku",
+    "test:bun": "bun --bun poku",
+    "test:deno": "deno run -A npm:poku",
     "test:coverage": "npm run test -- --coverage",
     "lint": "biome lint && prettier --check .",
     "lint:fix": "biome lint --write && prettier --write .github/workflows/*.yml .",

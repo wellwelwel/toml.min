@@ -1,129 +1,215 @@
+import type { LocalDateOrTimeKind } from '../../src/index.ts';
+import type { Rejection } from '../__helpers__/index.mts';
 import { describe, it, strict } from 'poku';
-import { createRequire } from 'node:module';
-import { parse, read } from '../__helpers__/index.mts';
+import {
+  LocalDateOrTime,
+  OffsetDateTime,
+  assertParsesTo,
+  parse,
+  read,
+} from '../__helpers__/index.mts';
 
-const require = createRequire(import.meta.url);
-const { parse: parseToml } = require('../../src/index.ts') as {
-  parse: <T = unknown>(input: string) => T;
-};
+type LocalForm = { source: string; kind: LocalDateOrTimeKind; text: string };
 
 describe('Datetimes', () => {
-  it('parses UTC dates', () =>
-    parse(read('datetimes--utc.toml'), {
-      a: new Date('1979-05-27T07:32:00Z'),
+  it('reads a UTC date-time as a Date', () =>
+    assertParsesTo(read('datetimes--utc.toml'), {
+      a: new OffsetDateTime('1979-05-27T07:32:00Z', '1979-05-27T07:32:00Z'),
     }));
 
-  it('parses dates with offsets', () =>
-    parse(read('datetimes--offsets.toml'), {
-      a: new Date('1979-05-27T07:32:00-07:00'),
-      b: new Date('1979-05-27T07:32:00+02:00'),
+  it('applies the time zone offset of a date-time', () =>
+    assertParsesTo(read('datetimes--offsets.toml'), {
+      a: new OffsetDateTime(
+        '1979-05-27T07:32:00-07:00',
+        '1979-05-27T07:32:00-07:00'
+      ),
+      b: new OffsetDateTime(
+        '1979-05-27T07:32:00+02:00',
+        '1979-05-27T07:32:00+02:00'
+      ),
     }));
 
-  it('parses dates with fractional seconds', () =>
-    parse(read('datetimes--fractional-seconds.toml'), {
-      a: new Date('1979-05-27T00:32:00.999999-07:00'),
+  it('reads the fractional seconds of a date-time', () =>
+    assertParsesTo(read('datetimes--fractional-seconds.toml'), {
+      a: new OffsetDateTime(
+        '1979-05-27T00:32:00.999999-07:00',
+        '1979-05-27T00:32:00.999999-07:00'
+      ),
     }));
 
-  it('parses local datetime as string', () =>
-    parse(read('datetimes--local-datetime.toml'), {
-      a: '1979-05-27T07:32:00',
+  it('accepts a space between the date and the time', () =>
+    assertParsesTo(read('datetimes--space-delimited.toml'), {
+      a: new OffsetDateTime('1979-05-27T07:32:00Z', '1979-05-27 07:32:00Z'),
     }));
 
-  it('parses local date as string', () =>
-    parse(read('datetimes--local-date.toml'), {
-      a: '1979-05-27',
+  it('accepts a lowercase z as UTC', () =>
+    assertParsesTo(read('datetimes--lowercase-z.toml'), {
+      a: new OffsetDateTime('1979-05-27T07:32:00Z', '1979-05-27T07:32:00z'),
     }));
 
-  it('parses local time as string', () =>
-    parse(read('datetimes--local-time.toml'), { a: '07:32:00' }));
-
-  it('parses time with fractional seconds', () =>
-    parse(read('datetimes--time-fractional-seconds.toml'), {
-      a: '07:32:00.999',
+  it('accepts a lowercase t between the date and the time', () =>
+    assertParsesTo(read('datetimes--lowercase-t.toml'), {
+      a: new OffsetDateTime('1979-05-27T07:32:00Z', '1979-05-27t07:32:00Z'),
     }));
 
-  it('parses HH:MM (no seconds)', () =>
-    parse(read('datetimes--hh-mm-no-seconds.toml'), {
-      a: '07:32:00',
-    }));
+  it('reads back the text Date.prototype.toISOString() writes', () => {
+    const text = new Date('2024-02-29T23:59:59.999Z').toISOString();
 
-  it('parses space-delimited datetime', () => {
-    const r = parseToml<Record<string, Date>>(
-      read('datetimes--space-delimited.toml')
-    );
-    strict.ok(r.a instanceof Date);
-    strict.equal(r.a.toISOString(), '1979-05-27T07:32:00.000Z');
+    assertParsesTo(`a = ${text}`, { a: new OffsetDateTime(text, text) });
   });
 
-  it('lowercase z offset', () => {
-    const r = parseToml<Record<string, Date>>(
-      read('datetimes--lowercase-z.toml')
-    );
-    strict.ok(r.a instanceof Date);
-  });
+  it('keeps the written offset in the text', () =>
+    assertParsesTo('a = 1979-05-27T07:32:00+05:30', {
+      a: new OffsetDateTime(
+        '1979-05-27T02:02:00Z',
+        '1979-05-27T07:32:00+05:30'
+      ),
+    }));
 
-  it('datetime with lowercase t delimiter', () => {
-    const r = parseToml<Record<string, Date>>(
-      read('remaining-coverage--datetime-lowercase-t.toml')
+  it('keeps a fraction finer than a millisecond in the text', () =>
+    assertParsesTo('a = 1979-05-27T07:32:00.123456789Z', {
+      a: new OffsetDateTime(
+        '1979-05-27T07:32:00.123Z',
+        '1979-05-27T07:32:00.123456789Z'
+      ),
+    }));
+
+  it('stays a Date that converts to its UTC instant in JSON', () => {
+    const result = parse<Record<string, unknown>>(
+      'a = 1979-05-27T07:32:00+05:30'
     );
-    strict.ok(r.a instanceof Date);
+
+    strict.ok(result.a instanceof Date);
+    strict.equal(JSON.stringify(result), '{"a":"1979-05-27T02:02:00.000Z"}');
   });
 });
 
+describe('Local dates and times', () => {
+  const forms: LocalForm[] = [
+    {
+      source: 'a = 1979-05-27T07:32:00',
+      kind: 'date-time',
+      text: '1979-05-27T07:32:00',
+    },
+    {
+      source: 'a = 1979-05-27 07:32:00',
+      kind: 'date-time',
+      text: '1979-05-27 07:32:00',
+    },
+    {
+      source: 'a = 1979-05-27t07:32',
+      kind: 'date-time',
+      text: '1979-05-27t07:32',
+    },
+    { source: 'a = 1979-05-27', kind: 'date', text: '1979-05-27' },
+    { source: 'a = 07:32', kind: 'time', text: '07:32' },
+    { source: 'a = 07:32:00', kind: 'time', text: '07:32:00' },
+    {
+      source: 'a = 07:32:00.123456789',
+      kind: 'time',
+      text: '07:32:00.123456789',
+    },
+  ];
+
+  it('tells an unquoted date apart from the same text in quotes', () => {
+    const result = parse<Record<string, unknown>>(
+      'command = 1979-05-27\nquoted = "1979-05-27"'
+    );
+
+    strict.ok(result.command instanceof LocalDateOrTime);
+    strict.equal(result.quoted, '1979-05-27');
+  });
+
+  for (const form of forms)
+    it(`keeps the kind and the exact text of "${form.source}"`, () =>
+      assertParsesTo(form.source, {
+        a: new LocalDateOrTime(form.kind, form.text),
+      }));
+
+  it('converts to its exact text in strings and in JSON', () => {
+    const result = parse<Record<string, unknown>>('a = 07:32');
+
+    strict.equal(`${result.a}`, '07:32');
+    strict.equal(JSON.stringify(result), '{"a":"07:32"}');
+  });
+
+  for (const source of [
+    'a = 1979-05-27\na.b = 1',
+    'a = 1979-05-27\n[a.b]',
+    'a = { b = 07:32, b.c = 1 }',
+  ])
+    it(`is never treated as a table: ${JSON.stringify(source)}`, () =>
+      strict.throws(() => parse(source), {
+        name: 'TomlError',
+        code: 'DUPLICATE_KEY',
+      }));
+});
+
 describe('Date validation', () => {
-  it('rejects invalid month 13', () =>
-    strict.throws(() =>
-      parseToml(read('date-validation--invalid-month-13.toml'))
-    ));
+  const rejections: Rejection[] = [
+    {
+      name: 'month 13',
+      fixture: 'date-validation--invalid-month-13.toml',
+      code: 'INVALID_DATE',
+    },
+    {
+      name: 'day 0',
+      fixture: 'date-validation--day-zero.toml',
+      code: 'INVALID_DATE',
+    },
+    {
+      name: 'February 29 in a common year',
+      fixture: 'date-validation--feb-29-non-leap.toml',
+      code: 'INVALID_DATE',
+    },
+    {
+      name: 'hour 24',
+      fixture: 'date-validation--hour-24.toml',
+      code: 'INVALID_TIME',
+    },
+    {
+      name: 'minute 60',
+      fixture: 'date-validation--minute-60.toml',
+      code: 'INVALID_TIME',
+    },
+    {
+      name: 'second 60',
+      fixture: 'date-validation--second-60.toml',
+      code: 'INVALID_TIME',
+    },
+    {
+      name: 'an offset of 25 hours',
+      fixture: 'date-validation--invalid-offset-hour.toml',
+      code: 'INVALID_TIME',
+    },
+    {
+      name: 'an offset of 61 minutes',
+      fixture: 'date-validation--invalid-offset-minute.toml',
+      code: 'INVALID_TIME',
+    },
+    {
+      name: 'a date followed by T and no valid time',
+      fixture: 'date-validation--invalid-time-after-t.toml',
+      code: 'EXPECTED_NEWLINE',
+    },
+    {
+      name: 'a date-time followed by an incomplete offset',
+      fixture: 'date-validation--incomplete-offset.toml',
+      code: 'EXPECTED_NEWLINE',
+    },
+  ];
 
-  it('rejects day 0', () =>
-    strict.throws(() => parseToml(read('date-validation--day-zero.toml'))));
+  it('accepts February 29 in a leap year', () =>
+    assertParsesTo(read('date-validation--feb-29-leap.toml'), {
+      a: new OffsetDateTime('2024-02-29T00:00:00Z', '2024-02-29T00:00:00Z'),
+    }));
 
-  it('rejects Feb 29 on non-leap year', () =>
-    strict.throws(() =>
-      parseToml(read('date-validation--feb-29-non-leap.toml'))
-    ));
+  it('accepts February 29 in a century leap year', () =>
+    assertParsesTo(read('date-validation--feb-29-century-leap.toml'), {
+      a: new OffsetDateTime('2000-02-29T00:00:00Z', '2000-02-29T00:00:00Z'),
+    }));
 
-  it('accepts Feb 29 on leap year', () => {
-    const r = parseToml<Record<string, Date>>(
-      read('date-validation--feb-29-leap.toml')
-    );
-    strict.ok(r.a instanceof Date);
-  });
-
-  it('accepts Feb 29 on century leap year (2000)', () => {
-    const r = parseToml<Record<string, Date>>(
-      read('date-validation--feb-29-century-leap.toml')
-    );
-    strict.ok(r.a instanceof Date);
-  });
-
-  it('rejects hour 24', () =>
-    strict.throws(() => parseToml(read('date-validation--hour-24.toml'))));
-
-  it('rejects minute 60', () =>
-    strict.throws(() => parseToml(read('date-validation--minute-60.toml'))));
-
-  it('rejects second 60', () =>
-    strict.throws(() => parseToml(read('date-validation--second-60.toml'))));
-
-  it('rejects invalid offset hour', () =>
-    strict.throws(() =>
-      parseToml(read('date-validation--invalid-offset-hour.toml'))
-    ));
-
-  it('rejects invalid offset minute', () =>
-    strict.throws(() =>
-      parseToml(read('date-validation--invalid-offset-minute.toml'))
-    ));
-
-  it('rejects invalid time after date+T delimiter', () =>
-    strict.throws(() =>
-      parseToml(read('remaining-coverage--invalid-time-after-t.toml'))
-    ));
-
-  it('rejects incomplete offset after datetime', () =>
-    strict.throws(() =>
-      parseToml(read('remaining-coverage--incomplete-offset.toml'))
-    ));
+  for (const { name, fixture, code } of rejections)
+    it(`rejects ${name}`, () =>
+      strict.throws(() => parse(read(fixture)), { name: 'TomlError', code }));
 });

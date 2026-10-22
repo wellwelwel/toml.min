@@ -1,15 +1,15 @@
 import { describe, it } from 'poku';
-import { parse, read } from '../__helpers__/index.mts';
+import { OffsetDateTime, assertParsesTo, read } from '../__helpers__/index.mts';
 
 describe('Fixture files', () => {
   it('parses example.toml', () =>
-    parse(read('fixture-files--example.toml'), {
+    assertParsesTo(read('fixture-files--example.toml'), {
       title: 'TOML Example',
       owner: {
         name: 'Tom Preston-Werner',
         organization: 'GitHub',
         bio: 'GitHub Cofounder & CEO\n\tLikes "tater tots" and beer and backslashes: \\',
-        dob: new Date('1979-05-27T07:32:00Z'),
+        dob: new OffsetDateTime('1979-05-27T07:32:00Z', '1979-05-27T07:32:00Z'),
       },
       database: {
         server: '192.168.1.1',
@@ -33,7 +33,7 @@ describe('Fixture files', () => {
     }));
 
   it('parses hard_example.toml', () =>
-    parse(read('fixture-files--hard-example.toml'), {
+    assertParsesTo(read('fixture-files--hard-example.toml'), {
       the: {
         hard: {
           another_test_string: ' Same thing, but with a string #',
@@ -51,7 +51,7 @@ describe('Fixture files', () => {
     }));
 
   it('parses easy table arrays', () =>
-    parse(read('fixture-files--easy-table-arrays.toml'), {
+    assertParsesTo(read('fixture-files--easy-table-arrays.toml'), {
       products: [
         { name: 'Hammer', sku: 738594937 },
         {},
@@ -60,7 +60,7 @@ describe('Fixture files', () => {
     }));
 
   it('parses hard table arrays', () =>
-    parse(read('fixture-files--hard-table-arrays.toml'), {
+    assertParsesTo(read('fixture-files--hard-table-arrays.toml'), {
       fruit: [
         { name: 'durian', variety: [] },
         {

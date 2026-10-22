@@ -1,15 +1,10 @@
+import type { Rejection } from '../__helpers__/index.mts';
 import { describe, it, strict } from 'poku';
-import { createRequire } from 'node:module';
-import { parse, read } from '../__helpers__/index.mts';
-
-const require = createRequire(import.meta.url);
-const { parse: parseToml } = require('../../src/index.ts') as {
-  parse: <T = unknown>(input: string) => T;
-};
+import { assertParsesTo, parse, read } from '../__helpers__/index.mts';
 
 describe('Numbers', () => {
-  it('integer formats', () =>
-    parse(read('numbers--integer-formats.toml'), {
+  it('reads signed, unsigned and underscored integers', () =>
+    assertParsesTo(read('numbers--integer-formats.toml'), {
       a: 99,
       b: 42,
       c: 0,
@@ -18,8 +13,8 @@ describe('Numbers', () => {
       f: 12345,
     }));
 
-  it('float formats', () =>
-    parse(read('numbers--float-formats.toml'), {
+  it('reads fractions, exponents and underscored floats', () =>
+    assertParsesTo(read('numbers--float-formats.toml'), {
       a: 1.0,
       b: 3.1415,
       c: -0.01,
@@ -31,84 +26,157 @@ describe('Numbers', () => {
       i: Number.POSITIVE_INFINITY,
     }));
 
-  it('hex integer', () =>
-    parse(read('numbers--hex-integer.toml'), { a: 0xdeadbeef }));
-  it('octal integer', () =>
-    parse(read('numbers--octal-integer.toml'), { a: 0o755 }));
-  it('binary integer', () =>
-    parse(read('numbers--binary-integer.toml'), {
-      a: 0b11010110,
-    }));
+  it('reads hexadecimal integers', () =>
+    assertParsesTo(read('numbers--hex-integer.toml'), { a: 0xdeadbeef }));
 
-  it('bare integer 0 at end of input', () =>
-    parse(read('remaining-coverage--bare-zero.toml'), { a: 0 }));
+  it('reads lowercase hexadecimal digits', () =>
+    assertParsesTo(read('numbers--hex-lowercase.toml'), { a: 255 }));
 
-  it('hex with lowercase letters', () =>
-    parse(read('remaining-coverage--hex-lowercase.toml'), {
-      a: 255,
-    }));
+  it('reads octal integers', () =>
+    assertParsesTo(read('numbers--octal-integer.toml'), { a: 0o755 }));
 
-  it('special float: inf', () => {
-    const r = parseToml<Record<string, number>>(
+  it('reads binary integers', () =>
+    assertParsesTo(read('numbers--binary-integer.toml'), { a: 0b11010110 }));
+
+  it('reads 0 at the end of the file', () =>
+    assertParsesTo(read('numbers--bare-zero.toml'), { a: 0 }));
+
+  it('reads inf with and without a sign', () => {
+    const result = parse<Record<string, number>>(
       read('numbers--special-inf.toml')
     );
-    strict.equal(r.a, Number.POSITIVE_INFINITY);
-    strict.equal(r.b, Number.POSITIVE_INFINITY);
-    strict.equal(r.c, Number.NEGATIVE_INFINITY);
+
+    strict.equal(result.a, Number.POSITIVE_INFINITY);
+    strict.equal(result.b, Number.POSITIVE_INFINITY);
+    strict.equal(result.c, Number.NEGATIVE_INFINITY);
   });
 
-  it('special float: nan', () => {
-    const r = parseToml<Record<string, number>>(
+  it('reads nan with and without a sign', () => {
+    const result = parse<Record<string, number>>(
       read('numbers--special-nan.toml')
     );
-    strict.ok(Number.isNaN(r.a));
-    strict.ok(Number.isNaN(r.b));
-    strict.ok(Number.isNaN(r.c));
+
+    strict.ok(Number.isNaN(result.a));
+    strict.ok(Number.isNaN(result.b));
+    strict.ok(Number.isNaN(result.c));
   });
 });
 
 describe('Number validation', () => {
-  it('float starting from 0', () =>
-    parse(read('number-validation--float-starting-from-zero.toml'), {
-      a: 0.5,
-    }));
-  it('float 0 with exponent', () =>
-    parse(read('number-validation--float-zero-exponent.toml'), {
+  const rejections: Rejection[] = [
+    {
+      name: 'a leading zero',
+      fixture: 'number-validation--leading-zeros.toml',
+      code: 'INVALID_NUMBER',
+    },
+    {
+      name: 'an underscore right after a leading 0',
+      fixture: 'number-validation--zero-underscore.toml',
+      code: 'INVALID_NUMBER',
+    },
+    {
+      name: 'a trailing underscore',
+      fixture: 'number-validation--trailing-underscore.toml',
+      code: 'INVALID_NUMBER',
+    },
+    {
+      name: 'an underscore before the first hexadecimal digit',
+      fixture: 'number-validation--underscore-before-hex-digit.toml',
+      code: 'INVALID_NUMBER',
+    },
+    {
+      name: 'a sign followed by letters',
+      fixture: 'number-validation--sign-without-digits.toml',
+      code: 'INVALID_NUMBER',
+    },
+  ];
+
+  it('reads 0 with an exponent', () =>
+    assertParsesTo(read('number-validation--float-zero-exponent.toml'), {
       a: 0,
     }));
 
-  it('negative number', () =>
-    parse(read('number-validation--negative.toml'), { a: -42 }));
-  it('positive number with sign', () =>
-    parse(read('number-validation--positive-sign.toml'), {
-      a: 42,
-    }));
+  for (const { name, fixture, code } of rejections)
+    it(`rejects ${name}`, () =>
+      strict.throws(() => parse(read(fixture)), { name: 'TomlError', code }));
+});
 
-  it('rejects 0 followed by underscore', () =>
-    strict.throws(() =>
-      parseToml(read('number-validation--zero-underscore.toml'))
+describe('Integer range', () => {
+  const unsafeIntegers = [
+    '9007199254740993',
+    '9007199254740992',
+    '-9007199254740992',
+    '0x20000000000000',
+    '0o400000000000000000',
+    `0b1${'0'.repeat(53)}`,
+    '9223372036854775808',
+    '9'.repeat(400),
+  ];
+
+  for (const integer of unsafeIntegers)
+    it(`rejects ${integer.slice(0, 24)} instead of rounding it`, () =>
+      strict.throws(() => parse(`a = ${integer}`), {
+        name: 'TomlError',
+        code: 'INTEGER_OUT_OF_RANGE',
+        line: 1,
+        column: 5,
+      }));
+
+  it('keeps the edges of the safe integer range', () => {
+    const result = parse<Record<string, number>>(
+      'max = 9007199254740991\nmin = -9007199254740991\nhex = 0x1FFFFFFFFFFFFF'
+    );
+
+    strict.equal(result.max, 9007199254740991);
+    strict.equal(result.min, -9007199254740991);
+    strict.equal(result.hex, 9007199254740991);
+  });
+
+  it('applies only to integers, not floats', () =>
+    strict.equal(
+      parse<Record<string, number>>('a = 9007199254740993.0').a,
+      9007199254740992
     ));
+});
 
-  it('rejects trailing underscore in integer', () =>
-    strict.throws(() =>
-      parseToml(read('number-validation--trailing-underscore.toml'))
-    ));
+describe('BigInt integers', () => {
+  const outOfInt64 = [
+    '9223372036854775808',
+    '-9223372036854775809',
+    '0x8000000000000000',
+    '10_000_000_000_000_000_000',
+    '9'.repeat(200_000),
+  ];
 
-  it('rejects underscore before digit in hex', () =>
-    strict.throws(() =>
-      parseToml(read('number-validation--underscore-before-hex-digit.toml'))
-    ));
+  it('reads the whole 64-bit range exactly', () => {
+    const result = parse<Record<string, bigint>>(
+      'max = 9223372036854775807\nmin = -9223372036854775808\nhex = 0x7FFFFFFFFFFFFFFF',
+      { bigint: true }
+    );
 
-  it('rejects leading zeros', () =>
-    strict.throws(() => parseToml(read('errors--leading-zeros.toml'))));
+    strict.equal(result.max, 9223372036854775807n);
+    strict.equal(result.min, -9223372036854775808n);
+    strict.equal(result.hex, 9223372036854775807n);
+  });
 
-  it('rejects value at end of input', () =>
-    strict.throws(() =>
-      parseToml(read('number-validation--value-at-end-of-input.toml'))
-    ));
+  it('returns every integer as a BigInt and leaves floats as numbers', () => {
+    const result = parse<Record<string, unknown>>(
+      'small = 42\nzero = 0\npadded = 0x0000000000000000000000000000000000000000000000000000000000000000001\nfloat = 1.5',
+      { bigint: true }
+    );
 
-  it('rejects sign followed by non-digit', () =>
-    strict.throws(() =>
-      parseToml(read('remaining-coverage--sign-followed-by-non-digit.toml'))
-    ));
+    strict.equal(result.small, 42n);
+    strict.equal(result.zero, 0n);
+    strict.equal(result.padded, 1n);
+    strict.equal(result.float, 1.5);
+  });
+
+  for (const integer of outOfInt64)
+    it(`rejects ${integer.slice(0, 24)} outside the 64-bit range`, () =>
+      strict.throws(() => parse(`a = ${integer}`, { bigint: true }), {
+        name: 'TomlError',
+        code: 'INTEGER_OUT_OF_RANGE',
+        line: 1,
+        column: 5,
+      }));
 });

@@ -1,4 +1,15 @@
-import type { MetaNode } from './types.js';
+import type {
+  LocalDateOrTimeKind,
+  MetaNode,
+  ParseOptions,
+  TomlErrorCode,
+} from './types.js';
+
+export type {
+  LocalDateOrTimeKind,
+  ParseOptions,
+  TomlErrorCode,
+} from './types.js';
 
 const TAB = 0x09;
 const LF = 0x0a;
@@ -12,8 +23,14 @@ const COMMA = 0x2c;
 const DASH = 0x2d;
 const DOT = 0x2e;
 const ZERO = 0x30;
+const ONE = 0x31;
+const SEVEN = 0x37;
+const NINE = 0x39;
 const COLON = 0x3a;
 const EQUALS = 0x3d;
+const CHAR_A = 0x41;
+const CHAR_E = 0x45;
+const CHAR_F = 0x46;
 const CHAR_T = 0x54;
 const CHAR_U = 0x55;
 const CHAR_Z = 0x5a;
@@ -38,53 +55,177 @@ const CHAR_z = 0x7a;
 const LEFT_BRACE = 0x7b;
 const RIGHT_BRACE = 0x7d;
 const DEL = 0x7f;
+const HIGH_SURROGATE_START = 0xd800;
+const LOW_SURROGATE_START = 0xdc00;
+const LOW_SURROGATE_END = 0xdfff;
 const BOM = 0xfeff;
+const MAX_CODE_POINT = 0x10ffff;
 
-const isBareKeyChar = (code: number): boolean =>
-  (code >= 0x41 && code <= 0x5a) || // A-Z
-  (code >= 0x61 && code <= 0x7a) || // a-z
-  (code >= 0x30 && code <= 0x39) || // 0-9
-  code === DASH ||
-  code === UNDERSCORE;
+const DEFAULT_MAX_DEPTH = 100;
+const ECHO_LIMIT = 40;
+const MAX_INTEGER_DIGITS = 64;
+const MIN_INT64 = -9223372036854775808n;
+const MAX_INT64 = 9223372036854775807n;
+const RADIX_PREFIXES: Record<number, string> = {
+  2: '0b',
+  8: '0o',
+  10: '',
+  16: '0x',
+};
 
-const isDigit = (code: number): boolean => code >= 0x30 && code <= 0x39;
-
-const isHexDigit = (code: number): boolean =>
-  (code >= 0x30 && code <= 0x39) || // 0-9
-  (code >= 0x41 && code <= 0x46) || // A-F
-  (code >= 0x61 && code <= 0x66); // a-f
-
-const isOctDigit = (code: number): boolean => code >= 0x30 && code <= 0x37;
-
-const isBinDigit = (code: number): boolean => code === 0x30 || code === 0x31;
-
-const stripUnderscores = (source: string): string =>
-  source.indexOf('_') === -1 ? source : source.replace(/_/g, '');
+const DECIMAL_DIGIT = 'a digit (0-9)';
+const HEX_DIGIT = 'a hexadecimal digit (0-9, A-F)';
+const OCTAL_DIGIT = 'an octal digit (0-7)';
+const BINARY_DIGIT = 'a binary digit (0 or 1)';
 
 const MAX_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
-export const parse = <T = unknown>(input: string): T => {
+const HIDDEN_CHARACTER =
+  /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/u;
+
+const isDigit = (code: number): boolean => code >= ZERO && code <= NINE;
+
+const isHexDigit = (code: number): boolean =>
+  isDigit(code) ||
+  (code >= CHAR_A && code <= CHAR_F) ||
+  (code >= CHAR_a && code <= CHAR_f);
+
+const isOctalDigit = (code: number): boolean => code >= ZERO && code <= SEVEN;
+
+const isBinaryDigit = (code: number): boolean => code === ZERO || code === ONE;
+
+const isBareKeyCharacter = (code: number): boolean =>
+  (code >= CHAR_A && code <= CHAR_Z) ||
+  (code >= CHAR_a && code <= CHAR_z) ||
+  (code >= ZERO && code <= NINE) ||
+  code === DASH ||
+  code === UNDERSCORE;
+
+const isForbiddenControlCharacter = (code: number): boolean =>
+  (code < SPACE && code !== TAB) || code === DEL;
+
+const isHighSurrogate = (code: number): boolean =>
+  code >= HIGH_SURROGATE_START && code < LOW_SURROGATE_START;
+
+const isLowSurrogate = (code: number): boolean =>
+  code >= LOW_SURROGATE_START && code <= LOW_SURROGATE_END;
+
+const isSurrogate = (code: number): boolean =>
+  isHighSurrogate(code) || isLowSurrogate(code);
+
+const isExponentMarker = (code: number): boolean =>
+  code === CHAR_e || code === CHAR_E;
+
+const stripUnderscores = (digits: string): string =>
+  digits.includes('_') ? digits.replace(/_/g, '') : digits;
+
+const hexCode = (codePoint: number): string =>
+  codePoint.toString(16).toUpperCase().padStart(4, '0');
+
+const codePointName = (codePoint: number): string => `U+${hexCode(codePoint)}`;
+
+const quoteInput = (text: string): string => {
+  let shown = '';
+  for (const character of text) {
+    const visible = HIDDEN_CHARACTER.test(character)
+      ? `[${codePointName(character.codePointAt(0)!)}]`
+      : character;
+    if (shown.length + visible.length > ECHO_LIMIT) return `"${shown}…"`;
+    shown += visible;
+  }
+  return `"${shown}"`;
+};
+
+const formatPath = (keys: string[]): string =>
+  keys.map((key) => (key.indexOf('.') > -1 ? `'${key}'` : key)).join('.');
+
+const createMetaNode = (): MetaNode => ({
+  assigned: false,
+  holdsValue: false,
+  explicit: false,
+  tableArray: false,
+  children: Object.create(null),
+});
+
+const ensureChildMeta = (meta: MetaNode, key: string): MetaNode => {
+  const known = meta.children[key];
+  if (known) return known;
+  const child = createMetaNode();
+  meta.children[key] = child;
+  return child;
+};
+
+export class TomlError extends Error {
+  readonly code: TomlErrorCode;
+  readonly line: number;
+  readonly column: number;
+
+  constructor(
+    code: TomlErrorCode,
+    message: string,
+    line: number,
+    column: number
+  ) {
+    super(message);
+    this.name = 'TomlError';
+    this.code = code;
+    this.line = line;
+    this.column = column;
+  }
+}
+
+export class LocalDateOrTime {
+  readonly kind: LocalDateOrTimeKind;
+  readonly text: string;
+
+  constructor(kind: LocalDateOrTimeKind, text: string) {
+    this.kind = kind;
+    this.text = text;
+  }
+
+  toString(): string {
+    return this.text;
+  }
+
+  toJSON(): string {
+    return this.text;
+  }
+}
+
+export class OffsetDateTime extends Date {
+  readonly text: string;
+
+  constructor(instant: string, text: string) {
+    super(instant);
+    this.text = text;
+  }
+}
+
+export const parse = <T = unknown>(
+  input: string,
+  options?: ParseOptions
+): T => {
   if (typeof input !== 'string') throw new TypeError('source is not a string');
 
+  const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH;
+  if (!Number.isSafeInteger(maxDepth) || maxDepth < 0)
+    throw new TypeError('maxDepth must be a non-negative integer');
+
+  const bigint = options?.bigint === true;
+  const allowUnsafeKeys = options?.allowUnsafeKeys === true;
   const src = input.charCodeAt(0) === BOM ? input.slice(1) : input;
   const len = src.length;
   const root: Record<string, unknown> = Object.create(null);
+  const metaRoot = createMetaNode();
 
   let pos = 0;
-  let currentPath = '';
-  let context: Record<string, unknown> = root;
+  let context = root;
+  let contextKeys: string[] = [];
+  let contextMeta = metaRoot;
+  let contextDepth = 0;
+  let lastKeyOffset = 0;
 
-  const createMetaNode = (): MetaNode => ({
-    assigned: false,
-    value: false,
-    explicit: false,
-    children: Object.create(null),
-  });
-  const metaRoot = createMetaNode();
-  let currentMeta: MetaNode = metaRoot;
-
-  const fail = (msg: string, errorOffset?: number): never => {
-    const offset = errorOffset === undefined ? pos : errorOffset;
+  const fail = (code: TomlErrorCode, message: string, offset = pos): never => {
     let line = 1;
     let column = 1;
     for (let cursor = 0; cursor < offset; cursor++) {
@@ -95,13 +236,116 @@ export const parse = <T = unknown>(input: string): T => {
         column++;
       }
     }
-    const error = new Error(msg) as Error & { line: number; column: number };
-    error.line = line;
-    error.column = column;
-    throw error;
+    throw new TomlError(code, message, line, column);
   };
 
-  const skipWs = (): void => {
+  const describeFound = (): string => {
+    if (pos >= len) return 'the end of the file';
+    const current = src.charCodeAt(pos);
+    if (current === LF || current === CR) return 'the end of the line';
+    if (current === HASH) return 'a comment';
+    return quoteInput(String.fromCodePoint(src.codePointAt(pos)!));
+  };
+
+  const failTooDeep = (offset = pos): never =>
+    fail(
+      'NESTING_TOO_DEEP',
+      `Tables and arrays are nested more than ${maxDepth} levels deep here, which is over the limit.`,
+      offset
+    );
+
+  const failForbiddenCharacter = (
+    current: number,
+    container: 'string' | 'comment'
+  ): never => {
+    if (isSurrogate(current))
+      return fail(
+        'LONE_SURROGATE',
+        `This ${container} contains ${codePointName(current)}, which is not a valid Unicode character on its own. Remove it.`
+      );
+    const alternative =
+      container === 'string'
+        ? `, or write it as \\u${hexCode(current)} inside "double quotes"`
+        : '';
+    return fail(
+      'CONTROL_CHARACTER',
+      `This ${container} contains the invisible control character ${codePointName(current)}. Remove it${alternative}.`
+    );
+  };
+
+  const failAlreadySet = (path: string[], offset: number): never =>
+    fail(
+      'DUPLICATE_KEY',
+      `${quoteInput(formatPath(path))} is already set to a value, so no keys can be added under it.`,
+      offset
+    );
+
+  const failDefinedTwice = (path: string[], offset: number): never =>
+    fail(
+      'DUPLICATE_KEY',
+      `The key ${quoteInput(formatPath(path))} is defined more than once. Each key can only be set once.`,
+      offset
+    );
+
+  const failInvalidValue = (): never => {
+    let end = pos;
+    while (end < len && isBareKeyCharacter(src.charCodeAt(end))) end++;
+    return fail(
+      'INVALID_VALUE',
+      `${quoteInput(src.substring(pos, end))} is not a valid value. Put text inside "quotes", and write true and false in lowercase.`
+    );
+  };
+
+  const failIntegerRange = (
+    start: number,
+    min: number | bigint,
+    max: number | bigint
+  ): never =>
+    fail(
+      'INTEGER_OUT_OF_RANGE',
+      `The integer ${quoteInput(src.substring(start, pos))} is outside the range that can be read exactly. Whole numbers must be between ${min} and ${max}.`,
+      start
+    );
+
+  const failMissingValue = (): never =>
+    fail(
+      'EXPECTED_VALUE',
+      `Expected a value here, but found ${describeFound()}. Values look like "text", 42, true, [1, 2] or { key = 1 }.`
+    );
+
+  const failUnterminatedArray = (start: number): never =>
+    fail(
+      'UNTERMINATED_ARRAY',
+      'This array is never closed. Add ] after its last item.',
+      start
+    );
+
+  const failUnterminatedInlineTable = (start: number): never =>
+    fail(
+      'UNTERMINATED_INLINE_TABLE',
+      'This inline table is never closed. Add } after its last entry.',
+      start
+    );
+
+  const failConstructorTable = (): never =>
+    fail(
+      'INVALID_KEY',
+      `"constructor" can't hold a table, because merging the result into another object could change the built-in Object shared by the whole program. Give it a plain value, or rename it.`,
+      lastKeyOffset
+    );
+
+  const isLoneSurrogate = (current: number): boolean => {
+    if (isHighSurrogate(current))
+      return !isLowSurrogate(src.charCodeAt(pos + 1));
+    return isLowSurrogate(current) && !isHighSurrogate(src.charCodeAt(pos - 1));
+  };
+
+  const isForbiddenCharacter = (current: number): boolean =>
+    current < HIGH_SURROGATE_START
+      ? isForbiddenControlCharacter(current)
+      : isLoneSurrogate(current);
+
+  const skipWhitespace = (): void => {
     while (pos < len) {
       const current = src.charCodeAt(pos);
       if (current === SPACE || current === TAB) pos++;
@@ -128,8 +372,8 @@ export const parse = <T = unknown>(input: string): T => {
       while (pos < len) {
         const current = src.charCodeAt(pos);
         if (current === LF || current === CR) break;
-        if (current !== TAB && (current < SPACE || current === DEL))
-          fail('Invalid character in comment');
+        if (isForbiddenCharacter(current))
+          failForbiddenCharacter(current, 'comment');
         pos++;
       }
     }
@@ -138,29 +382,32 @@ export const parse = <T = unknown>(input: string): T => {
   const skipBlanks = (): void => {
     while (pos < len) {
       const current = src.charCodeAt(pos);
-      if (current === SPACE || current === TAB || current === LF) {
-        pos++;
-      } else if (current === CR) {
-        pos++;
-        if (pos < len && src.charCodeAt(pos) === LF) pos++;
-      } else if (current === HASH) {
-        skipComment();
-      } else {
-        break;
-      }
+      if (current === SPACE || current === TAB) pos++;
+      else if (current === HASH) skipComment();
+      else if (!skipNewline()) break;
     }
+  };
+
+  const endsLine = (): boolean => {
+    skipWhitespace();
+    skipComment();
+    return pos >= len || skipNewline();
   };
 
   const readBareKey = (): string => {
     const start = pos;
-    while (pos < len && isBareKeyChar(src.charCodeAt(pos))) pos++;
-    if (pos === start) fail('Expected a key');
+    while (pos < len && isBareKeyCharacter(src.charCodeAt(pos))) pos++;
+    if (pos === start)
+      fail(
+        'INVALID_KEY',
+        `Expected a key here, but found ${describeFound()}. Keys without quotes can only use A-Z, a-z, 0-9, - and _.`
+      );
     return src.substring(start, pos);
   };
 
   const readEscape = (): string => {
-    pos++; // skip backslash
-    if (pos >= len) fail('Unexpected end of input in escape sequence');
+    pos++;
+    if (pos >= len) return '';
     const current = src.charCodeAt(pos++);
     switch (current) {
       case CHAR_b:
@@ -180,37 +427,44 @@ export const parse = <T = unknown>(input: string): T => {
       case CHAR_e:
         return '\x1B';
       case CHAR_u:
-        return readUnicodeEscape(4);
+        return readUnicodeEscape(4, 'u');
       case CHAR_U:
-        return readUnicodeEscape(8);
+        return readUnicodeEscape(8, 'U');
       case CHAR_x:
-        return readUnicodeEscape(2);
+        return readUnicodeEscape(2, 'x');
       default:
         return fail(
-          `Invalid escape sequence: \\${String.fromCharCode(current)}`,
+          'INVALID_ESCAPE',
+          `${quoteInput(`\\${String.fromCodePoint(src.codePointAt(pos - 1)!)}`)} is not a valid escape. Write \\\\ for a backslash, or use 'single quotes' to keep backslashes as typed.`,
           pos - 2
         );
     }
   };
 
-  const readUnicodeEscape = (digits: number): string => {
+  const readUnicodeEscape = (digits: number, letter: string): string => {
     const start = pos;
     for (let cursor = 0; cursor < digits; cursor++) {
       if (pos >= len || !isHexDigit(src.charCodeAt(pos)))
-        fail('Invalid Unicode escape');
+        fail(
+          'INVALID_ESCAPE',
+          `\\${letter} must be followed by exactly ${digits} hexadecimal digits (0-9, A-F).`,
+          start - 2
+        );
       pos++;
     }
     const codePoint = Number.parseInt(src.substring(start, pos), 16);
-    if (codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff))
+    if (codePoint > MAX_CODE_POINT || isSurrogate(codePoint))
       fail(
-        `Invalid Unicode code point: ${src.substring(start, pos)}`,
+        'INVALID_ESCAPE',
+        `${quoteInput(src.substring(start - 2, pos))} is not a valid Unicode character.`,
         start - 2
       );
     return String.fromCodePoint(codePoint);
   };
 
   const readBasicString = (): string => {
-    pos++; // skip opening "
+    const start = pos;
+    pos++;
     let result = '';
     let segment = pos;
     while (pos < len) {
@@ -224,108 +478,23 @@ export const parse = <T = unknown>(input: string): T => {
         result += src.substring(segment, pos);
         result += readEscape();
         segment = pos;
-      } else if (
-        current === LF ||
-        current === CR ||
-        (current < SPACE && current !== TAB) ||
-        current === DEL
-      ) {
-        fail('Invalid character in basic string');
+      } else if (isForbiddenCharacter(current)) {
+        if (current === LF || current === CR) break;
+        failForbiddenCharacter(current, 'string');
       } else {
         pos++;
       }
     }
-    return fail('Unterminated basic string');
-  };
-
-  const readMultilineBasicString = (): string => {
-    pos += 3; // skip """
-    if (pos < len && src.charCodeAt(pos) === LF) pos++;
-    else if (pos < len && src.charCodeAt(pos) === CR) {
-      pos++;
-      if (pos < len && src.charCodeAt(pos) === LF) pos++;
-    }
-
-    let result = '';
-    let segment = pos;
-    while (pos < len) {
-      const current = src.charCodeAt(pos);
-      if (current === DOUBLE_QUOTE) {
-        let quoteCount = 0;
-        while (
-          pos + quoteCount < len &&
-          src.charCodeAt(pos + quoteCount) === DOUBLE_QUOTE
-        )
-          quoteCount++;
-        if (quoteCount >= 3) {
-          const extra = quoteCount - 3;
-          if (extra > 2) fail('Too many quotes in multiline basic string');
-          result += src.substring(segment, pos);
-          for (let cursor = 0; cursor < extra; cursor++) result += '"';
-          pos += quoteCount;
-          return result;
-        }
-        pos++;
-      } else if (current === BACKSLASH) {
-        result += src.substring(segment, pos);
-        const nextChar = pos + 1 < len ? src.charCodeAt(pos + 1) : 0;
-        if (
-          nextChar === LF ||
-          nextChar === CR ||
-          nextChar === SPACE ||
-          nextChar === TAB
-        ) {
-          pos++; // skip backslash
-          while (pos < len) {
-            const wsChar = src.charCodeAt(pos);
-            if (wsChar === SPACE || wsChar === TAB) {
-              pos++;
-            } else if (wsChar === LF) {
-              pos++;
-              break;
-            } else if (wsChar === CR) {
-              pos++;
-              if (pos < len && src.charCodeAt(pos) === LF) pos++;
-              break;
-            } else {
-              break;
-            }
-          }
-          while (pos < len) {
-            const wsChar = src.charCodeAt(pos);
-            if (wsChar === SPACE || wsChar === TAB || wsChar === LF) {
-              pos++;
-            } else if (wsChar === CR) {
-              pos++;
-              if (pos < len && src.charCodeAt(pos) === LF) pos++;
-            } else {
-              break;
-            }
-          }
-        } else {
-          result += readEscape();
-        }
-        segment = pos;
-      } else if (current === CR) {
-        result += src.substring(segment, pos);
-        result += '\n';
-        pos++;
-        if (pos < len && src.charCodeAt(pos) === LF) pos++;
-        segment = pos;
-      } else if (
-        (current < SPACE && current !== TAB && current !== LF) ||
-        current === DEL
-      ) {
-        fail('Invalid character in multiline basic string');
-      } else {
-        pos++;
-      }
-    }
-    return fail('Unterminated multiline basic string');
+    return fail(
+      'UNTERMINATED_STRING',
+      'This string is never closed. End it with " on the same line, or use """ for text that spans several lines.',
+      start
+    );
   };
 
   const readLiteralString = (): string => {
-    pos++; // skip '
+    const start = pos;
+    pos++;
     const segment = pos;
     while (pos < len) {
       const current = src.charCodeAt(pos);
@@ -334,133 +503,151 @@ export const parse = <T = unknown>(input: string): T => {
         pos++;
         return result;
       }
-      if (
-        current === LF ||
-        current === CR ||
-        (current < SPACE && current !== TAB) ||
-        current === DEL
-      )
-        fail('Invalid character in literal string');
+      if (isForbiddenCharacter(current)) {
+        if (current === LF || current === CR) break;
+        failForbiddenCharacter(current, 'string');
+      }
       pos++;
     }
-    return fail('Unterminated literal string');
+    return fail(
+      'UNTERMINATED_STRING',
+      "This string is never closed. End it with ' on the same line, or use ''' for text that spans several lines.",
+      start
+    );
   };
 
-  const readMultilineLiteralString = (): string => {
-    pos += 3; // skip '''
-    if (pos < len && src.charCodeAt(pos) === LF) pos++;
-    else if (pos < len && src.charCodeAt(pos) === CR) {
-      pos++;
-      if (pos < len && src.charCodeAt(pos) === LF) pos++;
-    }
-
+  const readMultilineString = (quote: number): string => {
+    const start = pos;
+    pos += 3;
+    skipNewline();
     let result = '';
     let segment = pos;
     while (pos < len) {
       const current = src.charCodeAt(pos);
-      if (current === SINGLE_QUOTE) {
-        let quoteCount = 0;
-        while (
-          pos + quoteCount < len &&
-          src.charCodeAt(pos + quoteCount) === SINGLE_QUOTE
-        )
-          quoteCount++;
-        if (quoteCount >= 3) {
-          const extra = quoteCount - 3;
-          if (extra > 2) fail('Too many quotes in multiline literal string');
-          result += src.substring(segment, pos);
-          for (let cursor = 0; cursor < extra; cursor++) result += "'";
-          pos += quoteCount;
-          return result;
-        }
-        pos++;
-      } else if (current === CR) {
+      if (current === quote) {
+        let quoteEnd = pos;
+        while (quoteEnd < len && src.charCodeAt(quoteEnd) === quote) quoteEnd++;
+        const quoteCount = quoteEnd - pos;
+        if (quoteCount > 5)
+          fail(
+            'TOO_MANY_QUOTES',
+            'This string ends with too many quotes in a row. At most five can end it: three that close the string and two that belong to the text.'
+          );
+        pos = quoteEnd;
+        if (quoteCount >= 3) return result + src.substring(segment, pos - 3);
+      } else if (current === BACKSLASH && quote === DOUBLE_QUOTE) {
         result += src.substring(segment, pos);
-        result += '\n';
-        pos++;
-        if (pos < len && src.charCodeAt(pos) === LF) pos++;
+        const next = src.charCodeAt(pos + 1);
+        if (next === LF || next === CR || next === SPACE || next === TAB) {
+          pos++;
+          do skipWhitespace();
+          while (skipNewline());
+        } else {
+          result += readEscape();
+        }
         segment = pos;
-      } else if (
-        (current < SPACE && current !== TAB && current !== LF) ||
-        current === DEL
-      ) {
-        fail('Invalid character in multiline literal string');
+      } else if (current === CR) {
+        result += `${src.substring(segment, pos)}\n`;
+        skipNewline();
+        segment = pos;
+      } else if (current !== LF && isForbiddenCharacter(current)) {
+        failForbiddenCharacter(current, 'string');
       } else {
         pos++;
       }
     }
-    return fail('Unterminated multiline literal string');
+    return fail(
+      'UNTERMINATED_STRING',
+      `This string is never closed. End it with ${quote === DOUBLE_QUOTE ? '"""' : "'''"}.`,
+      start
+    );
   };
 
-  const readString = (): string => {
-    const current = src.charCodeAt(pos);
-    if (current === DOUBLE_QUOTE) {
-      if (
-        src.charCodeAt(pos + 1) === DOUBLE_QUOTE &&
-        src.charCodeAt(pos + 2) === DOUBLE_QUOTE
-      )
-        return readMultilineBasicString();
-      return readBasicString();
-    }
-    if (current === SINGLE_QUOTE) {
-      if (
-        src.charCodeAt(pos + 1) === SINGLE_QUOTE &&
-        src.charCodeAt(pos + 2) === SINGLE_QUOTE
-      )
-        return readMultilineLiteralString();
-      return readLiteralString();
-    }
-    return fail('Expected string');
+  const isTripleQuote = (quote: number): boolean =>
+    src.charCodeAt(pos + 1) === quote && src.charCodeAt(pos + 2) === quote;
+
+  const readString = (quote: number): string => {
+    if (isTripleQuote(quote)) return readMultilineString(quote);
+    return quote === DOUBLE_QUOTE ? readBasicString() : readLiteralString();
   };
 
   const readSimpleKey = (): string => {
     const current = src.charCodeAt(pos);
-    if (current === DOUBLE_QUOTE) {
-      if (
-        src.charCodeAt(pos + 1) === DOUBLE_QUOTE &&
-        src.charCodeAt(pos + 2) === DOUBLE_QUOTE
-      )
-        fail('Multiline strings not allowed in keys');
-      return readBasicString();
-    }
-    if (current === SINGLE_QUOTE) {
-      if (
-        src.charCodeAt(pos + 1) === SINGLE_QUOTE &&
-        src.charCodeAt(pos + 2) === SINGLE_QUOTE
-      )
-        fail('Multiline strings not allowed in keys');
-      return readLiteralString();
-    }
-    return readBareKey();
+    if (current !== DOUBLE_QUOTE && current !== SINGLE_QUOTE)
+      return readBareKey();
+    if (isTripleQuote(current))
+      fail(
+        'INVALID_KEY',
+        `A key can't use triple quotes. Use "double" or 'single' quotes instead.`
+      );
+    return readString(current);
   };
 
-  const readDottedKey = (): string[] => {
-    const keys = [readSimpleKey()];
+  const refuseConstructorTable = (keys: string[]): void => {
+    if (!allowUnsafeKeys && keys[keys.length - 1] === 'constructor')
+      failConstructorTable();
+  };
+
+  const readDottedKey = (maxParts: number): string[] => {
+    const keys: string[] = [];
     while (true) {
-      skipWs();
-      if (pos >= len || src.charCodeAt(pos) !== DOT) break;
-      pos++; // skip .
-      skipWs();
-      keys.push(readSimpleKey());
+      if (keys.length >= maxParts) failTooDeep();
+      lastKeyOffset = pos;
+      const key = readSimpleKey();
+      if (key === '__proto__' && !allowUnsafeKeys)
+        fail(
+          'INVALID_KEY',
+          `"__proto__" can't be used as a key, because copying the result into an ordinary object would replace that object's prototype. Rename it.`,
+          lastKeyOffset
+        );
+      keys.push(key);
+      skipWhitespace();
+      if (pos >= len || src.charCodeAt(pos) !== DOT) return keys;
+      refuseConstructorTable(keys);
+      pos++;
+      skipWhitespace();
     }
+  };
+
+  const readEqualsSign = (): void => {
+    skipWhitespace();
+    if (pos >= len || src.charCodeAt(pos) !== EQUALS)
+      fail(
+        'EXPECTED_EQUALS',
+        `Expected = after this key, but found ${describeFound()}. Put keys with spaces or symbols inside "quotes".`
+      );
+    pos++;
+    skipWhitespace();
+  };
+
+  const readAssignedKey = (maxParts: number): string[] => {
+    const keys = readDottedKey(maxParts);
+    readEqualsSign();
+    if (src.charCodeAt(pos) === LEFT_BRACE) refuseConstructorTable(keys);
     return keys;
   };
 
   const readDigits = (
-    check: (code: number) => boolean,
-    name: string
+    isAllowedDigit: (code: number) => boolean,
+    digitName: string
   ): string => {
     const start = pos;
-    if (pos >= len || !check(src.charCodeAt(pos)))
-      fail(`Expected ${name} digit`);
+    if (pos >= len || !isAllowedDigit(src.charCodeAt(pos)))
+      fail(
+        'INVALID_NUMBER',
+        `Expected ${digitName} here, but found ${describeFound()}.`
+      );
     pos++;
     while (pos < len) {
       const current = src.charCodeAt(pos);
       if (current === UNDERSCORE) {
-        if (pos + 1 >= len || !check(src.charCodeAt(pos + 1)))
-          fail(`Invalid underscore in ${name}`);
+        if (pos + 1 >= len || !isAllowedDigit(src.charCodeAt(pos + 1)))
+          fail(
+            'INVALID_NUMBER',
+            'An underscore in a number must sit between two digits.'
+          );
         pos++;
-      } else if (check(current)) {
+      } else if (isAllowedDigit(current)) {
         pos++;
       } else {
         break;
@@ -469,12 +656,16 @@ export const parse = <T = unknown>(input: string): T => {
     return src.substring(start, pos);
   };
 
-  const validateDate = (dateStr: string, offset: number): void => {
-    const year = +dateStr.substring(0, 4);
-    const month = +dateStr.substring(5, 7);
-    const day = +dateStr.substring(8, 10);
+  const validateDate = (date: string, offset: number): void => {
+    const year = +date.substring(0, 4);
+    const month = +date.substring(5, 7);
+    const day = +date.substring(8, 10);
     if (month < 1 || month > 12)
-      fail(`Invalid date: month ${month} out of range.`, offset);
+      fail(
+        'INVALID_DATE',
+        `This date doesn't exist: month ${month} is not between 1 and 12.`,
+        offset
+      );
     let maxDay = MAX_DAYS[month - 1];
     if (
       month === 2 &&
@@ -482,117 +673,69 @@ export const parse = <T = unknown>(input: string): T => {
     )
       maxDay = 29;
     if (day < 1 || day > maxDay)
-      fail(`Invalid date: day ${day} out of range for month ${month}.`, offset);
+      fail(
+        'INVALID_DATE',
+        `This date doesn't exist: month ${month} of ${year} has no day ${day}.`,
+        offset
+      );
   };
 
-  const validateTime = (timeStr: string, offset: number): void => {
-    const hour = +timeStr.substring(0, 2);
-    const minute = +timeStr.substring(3, 5);
-    const second = +timeStr.substring(6, 8);
-    if (hour > 23) fail(`Invalid time: hour ${hour} out of range.`, offset);
+  const validateTime = (time: string, offset: number): void => {
+    const hour = +time.substring(0, 2);
+    const minute = +time.substring(3, 5);
+    const second = +time.substring(6, 8);
+    if (hour > 23)
+      fail(
+        'INVALID_TIME',
+        `This time doesn't exist: hour ${hour} is not between 0 and 23.`,
+        offset
+      );
     if (minute > 59)
-      fail(`Invalid time: minute ${minute} out of range.`, offset);
+      fail(
+        'INVALID_TIME',
+        `This time doesn't exist: minute ${minute} is not between 0 and 59.`,
+        offset
+      );
     if (second > 59)
-      fail(`Invalid time: second ${second} out of range.`, offset);
+      fail(
+        'INVALID_TIME',
+        `This time doesn't exist: second ${second} is not between 0 and 59.`,
+        offset
+      );
   };
 
-  const validateOffset = (offsetStr: string, offset: number): void => {
-    if (offsetStr === 'Z' || offsetStr === 'z') return;
-    const hour = +offsetStr.substring(1, 3);
-    const minute = +offsetStr.substring(4, 6);
-    if (hour > 23) fail(`Invalid offset: hour ${hour} out of range.`, offset);
+  const validateTimeOffset = (timeOffset: string, offset: number): void => {
+    if (timeOffset === 'Z') return;
+    const hour = +timeOffset.substring(1, 3);
+    const minute = +timeOffset.substring(4, 6);
+    if (hour > 23)
+      fail(
+        'INVALID_TIME',
+        `This time zone offset doesn't exist: hour ${hour} is not between 0 and 23.`,
+        offset
+      );
     if (minute > 59)
-      fail(`Invalid offset: minute ${minute} out of range.`, offset);
+      fail(
+        'INVALID_TIME',
+        `This time zone offset doesn't exist: minute ${minute} is not between 0 and 59.`,
+        offset
+      );
   };
 
-  const tryReadDatetime = (): unknown | undefined => {
-    const saved = pos;
+  const startsDate = (): boolean =>
+    pos + 10 <= len &&
+    isDigit(src.charCodeAt(pos)) &&
+    isDigit(src.charCodeAt(pos + 1)) &&
+    isDigit(src.charCodeAt(pos + 2)) &&
+    isDigit(src.charCodeAt(pos + 3)) &&
+    src.charCodeAt(pos + 4) === DASH &&
+    isDigit(src.charCodeAt(pos + 5)) &&
+    isDigit(src.charCodeAt(pos + 6)) &&
+    src.charCodeAt(pos + 7) === DASH &&
+    isDigit(src.charCodeAt(pos + 8)) &&
+    isDigit(src.charCodeAt(pos + 9));
 
-    // Try date_part: YYYY-MM-DD
-    if (
-      pos + 10 <= len &&
-      isDigit(src.charCodeAt(pos)) &&
-      isDigit(src.charCodeAt(pos + 1)) &&
-      isDigit(src.charCodeAt(pos + 2)) &&
-      isDigit(src.charCodeAt(pos + 3)) &&
-      src.charCodeAt(pos + 4) === DASH &&
-      isDigit(src.charCodeAt(pos + 5)) &&
-      isDigit(src.charCodeAt(pos + 6)) &&
-      src.charCodeAt(pos + 7) === DASH &&
-      isDigit(src.charCodeAt(pos + 8)) &&
-      isDigit(src.charCodeAt(pos + 9))
-    ) {
-      const datePart = src.substring(pos, pos + 10);
-      pos += 10;
-
-      // Check for datetime delimiter: T, t, or space followed by digit
-      const delimiter = pos < len ? src.charCodeAt(pos) : 0;
-      if (
-        delimiter === CHAR_T ||
-        delimiter === CHAR_t ||
-        (delimiter === SPACE &&
-          pos + 1 < len &&
-          isDigit(src.charCodeAt(pos + 1)))
-      ) {
-        pos++; // skip delimiter
-        const timeResult = tryReadTimePart();
-        if (timeResult === undefined) {
-          pos = saved;
-          return undefined;
-        }
-
-        const offsetPos = pos;
-        // Check for offset
-        const offsetChar = pos < len ? src.charCodeAt(pos) : 0;
-        if (offsetChar === CHAR_Z || offsetChar === CHAR_z) {
-          pos++;
-          validateDate(datePart, saved);
-          validateTime(timeResult, saved);
-          validateOffset('Z', offsetPos);
-          return new Date(`${datePart}T${timeResult}Z`);
-        }
-        if (offsetChar === PLUS || offsetChar === DASH) {
-          const offsetResult = tryReadOffset();
-          if (offsetResult !== undefined) {
-            validateDate(datePart, saved);
-            validateTime(timeResult, saved);
-            validateOffset(offsetResult, offsetPos);
-            return new Date(`${datePart}T${timeResult}${offsetResult}`);
-          }
-        }
-        // Local datetime
-        validateDate(datePart, saved);
-        validateTime(timeResult, saved);
-        return `${datePart}T${timeResult}`;
-      }
-
-      // Local date
-      validateDate(datePart, saved);
-      return datePart;
-    }
-
-    // Try local time: HH:MM[:SS[.frac]]
-    if (
-      pos + 5 <= len &&
-      isDigit(src.charCodeAt(pos)) &&
-      isDigit(src.charCodeAt(pos + 1)) &&
-      src.charCodeAt(pos + 2) === COLON &&
-      isDigit(src.charCodeAt(pos + 3)) &&
-      isDigit(src.charCodeAt(pos + 4))
-    ) {
-      const timeResult = tryReadTimePart();
-      if (timeResult !== undefined) {
-        validateTime(timeResult, saved);
-        return timeResult;
-      }
-    }
-
-    pos = saved;
-    return undefined;
-  };
-
-  const tryReadTimePart = (): string | undefined => {
-    // HH:MM
+  const tryReadTime = (): string | undefined => {
     if (
       pos + 5 > len ||
       !isDigit(src.charCodeAt(pos)) ||
@@ -603,43 +746,45 @@ export const parse = <T = unknown>(input: string): T => {
     )
       return undefined;
 
-    let result = src.substring(pos, pos + 5);
+    let time = src.substring(pos, pos + 5);
     pos += 5;
 
-    // :SS
     if (
       pos + 3 <= len &&
       src.charCodeAt(pos) === COLON &&
       isDigit(src.charCodeAt(pos + 1)) &&
       isDigit(src.charCodeAt(pos + 2))
     ) {
-      result += src.substring(pos, pos + 3);
+      time += src.substring(pos, pos + 3);
       pos += 3;
     } else {
-      result += ':00';
+      time += ':00';
     }
 
-    // .fraction
     if (
       pos < len &&
       src.charCodeAt(pos) === DOT &&
       pos + 1 < len &&
       isDigit(src.charCodeAt(pos + 1))
     ) {
-      const fracStart = pos;
-      pos++; // skip .
+      const fractionStart = pos;
+      pos++;
       while (pos < len && isDigit(src.charCodeAt(pos))) pos++;
-      result += src.substring(fracStart, pos);
+      time += src.substring(fractionStart, pos);
     }
 
-    return result;
+    return time;
   };
 
-  const tryReadOffset = (): string | undefined => {
-    // +HH:MM or -HH:MM
+  const tryReadTimeOffset = (): string | undefined => {
+    const current = pos < len ? src.charCodeAt(pos) : 0;
+    if (current === CHAR_Z || current === CHAR_z) {
+      pos++;
+      return 'Z';
+    }
     if (
       pos + 6 > len ||
-      (src.charCodeAt(pos) !== PLUS && src.charCodeAt(pos) !== DASH) ||
+      (current !== PLUS && current !== DASH) ||
       !isDigit(src.charCodeAt(pos + 1)) ||
       !isDigit(src.charCodeAt(pos + 2)) ||
       src.charCodeAt(pos + 3) !== COLON ||
@@ -648,164 +793,216 @@ export const parse = <T = unknown>(input: string): T => {
     )
       return undefined;
 
-    const result = src.substring(pos, pos + 6);
+    const timeOffset = src.substring(pos, pos + 6);
     pos += 6;
-    return result;
+    return timeOffset;
   };
 
-  const readNumberOrDate = (): unknown => {
-    const current = src.charCodeAt(pos);
+  const tryReadDateOrTime = ():
+    | OffsetDateTime
+    | LocalDateOrTime
+    | undefined => {
+    const start = pos;
 
-    // inf/nan with optional sign
-    if (current === PLUS || current === DASH) {
-      if (
-        src.charCodeAt(pos + 1) === CHAR_i &&
-        src.charCodeAt(pos + 2) === CHAR_n &&
-        src.charCodeAt(pos + 3) === CHAR_f
-      ) {
-        const sign = current === DASH ? -1 : 1;
-        pos += 4;
-        return sign * Number.POSITIVE_INFINITY;
-      }
-      if (
-        src.charCodeAt(pos + 1) === CHAR_n &&
-        src.charCodeAt(pos + 2) === CHAR_a &&
-        src.charCodeAt(pos + 3) === CHAR_n
-      ) {
-        pos += 4;
-        return Number.NaN;
-      }
+    if (!startsDate()) {
+      const time = tryReadTime();
+      if (time === undefined) return undefined;
+      validateTime(time, start);
+      return new LocalDateOrTime('time', src.substring(start, pos));
+    }
+
+    const date = src.substring(pos, pos + 10);
+    pos += 10;
+
+    const delimiter = pos < len ? src.charCodeAt(pos) : 0;
+    const hasTime =
+      delimiter === CHAR_T ||
+      delimiter === CHAR_t ||
+      (delimiter === SPACE &&
+        pos + 1 < len &&
+        isDigit(src.charCodeAt(pos + 1)));
+    if (!hasTime) {
+      validateDate(date, start);
+      return new LocalDateOrTime('date', date);
+    }
+
+    pos++;
+    const time = tryReadTime();
+    if (time === undefined) {
+      pos = start;
+      return undefined;
+    }
+    validateDate(date, start);
+    validateTime(time, start);
+
+    const offsetStart = pos;
+    const timeOffset = tryReadTimeOffset();
+    if (timeOffset === undefined)
+      return new LocalDateOrTime('date-time', src.substring(start, pos));
+    validateTimeOffset(timeOffset, offsetStart);
+    return new OffsetDateTime(
+      `${date}T${time}${timeOffset}`,
+      src.substring(start, pos)
+    );
+  };
+
+  const tryReadSpecialFloat = (): number | undefined => {
+    const sign = src.charCodeAt(pos);
+    const start = sign === PLUS || sign === DASH ? pos + 1 : pos;
+    const first = src.charCodeAt(start);
+    if (
+      first === CHAR_i &&
+      src.charCodeAt(start + 1) === CHAR_n &&
+      src.charCodeAt(start + 2) === CHAR_f
+    ) {
+      pos = start + 3;
+      return sign === DASH
+        ? Number.NEGATIVE_INFINITY
+        : Number.POSITIVE_INFINITY;
     }
     if (
-      src.charCodeAt(pos) === CHAR_i &&
-      src.charCodeAt(pos + 1) === CHAR_n &&
-      src.charCodeAt(pos + 2) === CHAR_f
+      first === CHAR_n &&
+      src.charCodeAt(start + 1) === CHAR_a &&
+      src.charCodeAt(start + 2) === CHAR_n
     ) {
-      pos += 3;
-      return Number.POSITIVE_INFINITY;
-    }
-    if (
-      src.charCodeAt(pos) === CHAR_n &&
-      src.charCodeAt(pos + 1) === CHAR_a &&
-      src.charCodeAt(pos + 2) === CHAR_n
-    ) {
-      pos += 3;
+      pos = start + 3;
       return Number.NaN;
     }
-
-    // Try datetime first
-    const saved = pos;
-    const datetime = tryReadDatetime();
-    if (datetime !== undefined) return datetime;
-    pos = saved;
-
-    // Numbers
-    return readNumber();
+    return undefined;
   };
 
-  const readNumber = (): number => {
-    let sign = 1;
-    const current = src.charCodeAt(pos);
-
-    if (current === PLUS || current === DASH) {
-      if (current === DASH) sign = -1;
-      pos++;
-    }
-
-    const firstDigit = src.charCodeAt(pos);
-    if (firstDigit === ZERO) {
-      const nextChar = pos + 1 < len ? src.charCodeAt(pos + 1) : 0;
-      if (nextChar === CHAR_x) {
-        // 0x hex
-        pos += 2;
-        const digits = readDigits(isHexDigit, 'hexadecimal');
-        return sign * Number.parseInt(stripUnderscores(digits), 16);
-      }
-      if (nextChar === CHAR_o) {
-        // 0o octal
-        pos += 2;
-        const digits = readDigits(isOctDigit, 'octal');
-        return sign * Number.parseInt(stripUnderscores(digits), 8);
-      }
-      if (nextChar === CHAR_b) {
-        // 0b binary
-        pos += 2;
-        const digits = readDigits(isBinDigit, 'binary');
-        return sign * Number.parseInt(stripUnderscores(digits), 2);
-      }
-      // Bare 0
-      pos++;
-      if (pos < len) {
-        const afterZero = src.charCodeAt(pos);
-        if (isDigit(afterZero) || afterZero === UNDERSCORE)
-          fail('Leading zeros are not allowed');
-        if (afterZero === DOT) return readFloatFrac(sign, '0');
-        if (afterZero === CHAR_e || afterZero === 0x45)
-          // e, E
-          return readFloatExp(sign, '0');
-      }
-      return 0;
-    }
-
-    if (!isDigit(firstDigit)) fail('Expected digit');
-    const intDigits = readDigits(isDigit, 'decimal');
-
-    if (pos < len) {
-      const afterInt = src.charCodeAt(pos);
-      if (afterInt === DOT) return readFloatFrac(sign, intDigits);
-      if (afterInt === CHAR_e || afterInt === 0x45)
-        // e, E
-        return readFloatExp(sign, intDigits);
-    }
-
-    return sign * Number.parseInt(stripUnderscores(intDigits), 10);
+  const toBigInt = (
+    digits: string,
+    radix: number,
+    sign: number,
+    start: number
+  ): bigint => {
+    const plain = stripUnderscores(digits);
+    let firstSignificant = 0;
+    while (
+      firstSignificant < plain.length - 1 &&
+      plain.charCodeAt(firstSignificant) === ZERO
+    )
+      firstSignificant++;
+    if (plain.length - firstSignificant > MAX_INTEGER_DIGITS)
+      failIntegerRange(start, MIN_INT64, MAX_INT64);
+    const magnitude = BigInt(
+      `${RADIX_PREFIXES[radix]}${plain.slice(firstSignificant)}`
+    );
+    const value = sign < 0 ? -magnitude : magnitude;
+    if (value < MIN_INT64 || value > MAX_INT64)
+      failIntegerRange(start, MIN_INT64, MAX_INT64);
+    return value;
   };
 
-  const readFloatFrac = (sign: number, intPart: string): number => {
-    pos++; // skip .
-    const fracDigits = readDigits(isDigit, 'decimal');
-    const combined = `${intPart}.${fracDigits}`;
-
-    if (pos < len) {
-      const afterFrac = src.charCodeAt(pos);
-      if (afterFrac === CHAR_e || afterFrac === 0x45)
-        // e, E
-        return readFloatExp(sign, combined);
-    }
-
-    return sign * Number.parseFloat(stripUnderscores(combined));
+  const toInteger = (
+    digits: string,
+    radix: number,
+    sign: number,
+    start: number
+  ): number | bigint => {
+    if (bigint) return toBigInt(digits, radix, sign, start);
+    const value = sign * Number.parseInt(stripUnderscores(digits), radix);
+    if (!Number.isSafeInteger(value))
+      failIntegerRange(start, Number.MIN_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+    return value;
   };
 
-  const readFloatExp = (sign: number, mantissa: string): number => {
-    pos++; // skip e/E
-    let expSign = '';
-    if (pos < len) {
-      const signChar = src.charCodeAt(pos);
-      if (signChar === PLUS) {
-        expSign = '+';
-        pos++;
-      } else if (signChar === DASH) {
-        expSign = '-';
-        pos++;
-      }
-    }
-    const expDigits = readDigits(isDigit, 'exponent');
+  const readExponent = (sign: number, mantissa: string): number => {
+    pos++;
+    const exponentStart = pos;
+    const exponentSign = src.charCodeAt(pos);
+    if (exponentSign === PLUS || exponentSign === DASH) pos++;
+    readDigits(isDigit, DECIMAL_DIGIT);
     return (
       sign *
       Number.parseFloat(
-        `${stripUnderscores(mantissa)}e${expSign}${stripUnderscores(expDigits)}`
+        `${stripUnderscores(mantissa)}e${stripUnderscores(src.substring(exponentStart, pos))}`
       )
     );
   };
 
-  const readValue = (): unknown => {
-    if (pos >= len) fail('Expected value');
+  const readFraction = (sign: number, integerPart: string): number => {
+    pos++;
+    const mantissa = `${integerPart}.${readDigits(isDigit, DECIMAL_DIGIT)}`;
+    if (pos < len && isExponentMarker(src.charCodeAt(pos)))
+      return readExponent(sign, mantissa);
+    return sign * Number.parseFloat(stripUnderscores(mantissa));
+  };
+
+  const readNumber = (): number | bigint => {
+    const start = pos;
+    const signCode = src.charCodeAt(pos);
+    const sign = signCode === DASH ? -1 : 1;
+    if (signCode === PLUS || signCode === DASH) pos++;
+
+    const firstDigit = src.charCodeAt(pos);
+    if (firstDigit === ZERO) {
+      const prefix = pos + 1 < len ? src.charCodeAt(pos + 1) : 0;
+      if (prefix === CHAR_x) {
+        pos += 2;
+        return toInteger(readDigits(isHexDigit, HEX_DIGIT), 16, sign, start);
+      }
+      if (prefix === CHAR_o) {
+        pos += 2;
+        return toInteger(readDigits(isOctalDigit, OCTAL_DIGIT), 8, sign, start);
+      }
+      if (prefix === CHAR_b) {
+        pos += 2;
+        return toInteger(
+          readDigits(isBinaryDigit, BINARY_DIGIT),
+          2,
+          sign,
+          start
+        );
+      }
+      pos++;
+      if (pos < len) {
+        const afterZero = src.charCodeAt(pos);
+        if (isDigit(afterZero) || afterZero === UNDERSCORE)
+          fail(
+            'INVALID_NUMBER',
+            'A number can only start with 0 when it is exactly 0. Remove the leading zeros.',
+            start
+          );
+        if (afterZero === DOT) return readFraction(sign, '0');
+        if (isExponentMarker(afterZero)) return readExponent(sign, '0');
+      }
+      return bigint ? 0n : 0;
+    }
+
+    if (!isDigit(firstDigit)) {
+      if (pos > start)
+        fail(
+          'INVALID_NUMBER',
+          `Expected a digit after the sign, but found ${describeFound()}.`
+        );
+      failInvalidValue();
+    }
+    const integerDigits = readDigits(isDigit, DECIMAL_DIGIT);
+    if (pos < len) {
+      const afterInteger = src.charCodeAt(pos);
+      if (afterInteger === DOT) return readFraction(sign, integerDigits);
+      if (isExponentMarker(afterInteger))
+        return readExponent(sign, integerDigits);
+    }
+    return toInteger(integerDigits, 10, sign, start);
+  };
+
+  const readNumberOrDate = ():
+    | number
+    | bigint
+    | OffsetDateTime
+    | LocalDateOrTime =>
+    tryReadSpecialFloat() ?? tryReadDateOrTime() ?? readNumber();
+
+  const readValue = (depth: number): unknown => {
+    if (pos >= len) return failMissingValue();
     const current = src.charCodeAt(pos);
 
     if (current === DOUBLE_QUOTE || current === SINGLE_QUOTE)
-      return readString();
+      return readString(current);
     if (current === CHAR_t) {
-      // true
       if (
         src.charCodeAt(pos + 1) === CHAR_r &&
         src.charCodeAt(pos + 2) === CHAR_u &&
@@ -814,10 +1011,9 @@ export const parse = <T = unknown>(input: string): T => {
         pos += 4;
         return true;
       }
-      fail('Invalid value');
+      failInvalidValue();
     }
     if (current === CHAR_f) {
-      // false
       if (
         src.charCodeAt(pos + 1) === CHAR_a &&
         src.charCodeAt(pos + 2) === CHAR_l &&
@@ -827,138 +1023,115 @@ export const parse = <T = unknown>(input: string): T => {
         pos += 5;
         return false;
       }
-      fail('Invalid value');
+      failInvalidValue();
     }
-    if (current === LEFT_BRACKET) return readArray();
-    if (current === LEFT_BRACE) return readInlineTable();
-
-    // number or date
+    if (current === LEFT_BRACKET) return readArray(depth);
+    if (current === LEFT_BRACE) return readInlineTable(depth);
     if (
       isDigit(current) ||
       current === PLUS ||
       current === DASH ||
-      current === CHAR_i || // inf
-      current === CHAR_n // nan
+      current === CHAR_i ||
+      current === CHAR_n
     )
       return readNumberOrDate();
 
-    fail(`Unexpected character: ${src[pos]}`);
+    if (isBareKeyCharacter(current)) failInvalidValue();
+    return failMissingValue();
   };
 
-  const readArray = (): unknown[] => {
-    pos++; // skip [
+  const readArray = (depth: number): unknown[] => {
+    const start = pos;
+    if (depth > maxDepth) failTooDeep();
+    pos++;
     const result: unknown[] = [];
-    skipBlanks();
-    if (pos < len && src.charCodeAt(pos) === RIGHT_BRACKET) {
-      pos++;
-      return result;
-    }
-    result.push(readValue());
     while (true) {
       skipBlanks();
-      if (pos >= len) fail('Unterminated array');
+      if (pos >= len) failUnterminatedArray(start);
       if (src.charCodeAt(pos) === RIGHT_BRACKET) {
         pos++;
         return result;
       }
-      if (src.charCodeAt(pos) !== COMMA) fail('Expected comma or ] in array');
-      pos++; // skip ,
+      result.push(readValue(depth + 1));
       skipBlanks();
-      if (pos < len && src.charCodeAt(pos) === RIGHT_BRACKET) {
+      if (pos >= len) failUnterminatedArray(start);
+      const separator = src.charCodeAt(pos);
+      if (separator === RIGHT_BRACKET) {
         pos++;
         return result;
       }
-      result.push(readValue());
+      if (separator !== COMMA)
+        fail(
+          'EXPECTED_COMMA',
+          `Expected a comma or ] here, but found ${describeFound()}. Separate items with commas and close the array with ].`
+        );
+      pos++;
     }
   };
 
-  const readInlineTable = (): Record<string, unknown> => {
-    pos++; // skip {
+  const readInlineTable = (depth: number): Record<string, unknown> => {
+    const start = pos;
+    if (depth > maxDepth) failTooDeep();
+    pos++;
     const table: Record<string, unknown> = Object.create(null);
-    const definedKeys = new Set<string>();
-    skipBlanks();
-    if (pos < len && src.charCodeAt(pos) === RIGHT_BRACE) {
-      pos++;
-      return table;
-    }
-    readInlineTableEntry(table, definedKeys);
+    const tableMeta = createMetaNode();
     while (true) {
       skipBlanks();
-      if (pos >= len) fail('Unterminated inline table');
+      if (pos >= len) failUnterminatedInlineTable(start);
       if (src.charCodeAt(pos) === RIGHT_BRACE) {
         pos++;
         return table;
       }
-      if (src.charCodeAt(pos) !== COMMA)
-        fail('Expected comma or } in inline table');
-      pos++; // skip ,
+      readInlineTableEntry(table, tableMeta, depth);
       skipBlanks();
-      if (pos < len && src.charCodeAt(pos) === RIGHT_BRACE) {
+      if (pos >= len) failUnterminatedInlineTable(start);
+      const separator = src.charCodeAt(pos);
+      if (separator === RIGHT_BRACE) {
         pos++;
         return table;
       }
-      readInlineTableEntry(table, definedKeys);
+      if (separator !== COMMA)
+        fail(
+          'EXPECTED_COMMA',
+          `Expected a comma or } here, but found ${describeFound()}. Separate entries with commas and close the table with }.`
+        );
+      pos++;
     }
   };
 
   const readInlineTableEntry = (
     table: Record<string, unknown>,
-    definedKeys: Set<string>
+    tableMeta: MetaNode,
+    depth: number
   ): void => {
     const offset = pos;
-    const keys = readDottedKey();
-    skipWs();
-    if (pos >= len || src.charCodeAt(pos) !== EQUALS)
-      fail('Expected = after key');
-    pos++; // skip =
-    skipWs();
-    const value = readValue();
-    setNestedKey(table, keys, value, offset, definedKeys);
-    definedKeys.add(keys.join('.'));
+    const keys = readAssignedKey(maxDepth - depth + 1);
+    const value = readValue(depth + keys.length);
+    assignInlineKeyValue(table, keys, value, offset, tableMeta);
   };
 
-  const setNestedKey = (
+  const assignInlineKeyValue = (
     table: Record<string, unknown>,
     keys: string[],
     value: unknown,
     offset: number,
-    definedKeys: Set<string>
+    tableMeta: MetaNode
   ): void => {
+    const lastIndex = keys.length - 1;
     let target = table;
-    let buildPath = '';
-    for (let depth = 0; depth < keys.length - 1; depth++) {
+    let meta = tableMeta;
+    for (let depth = 0; depth < lastIndex; depth++) {
       const key = keys[depth];
-      buildPath = buildPath ? `${buildPath}.${key}` : key;
-      if (target[key] === undefined) {
-        target[key] = Object.create(null);
-      } else if (
-        typeof target[key] !== 'object' ||
-        target[key] === null ||
-        Array.isArray(target[key])
-      ) {
-        fail(`Cannot redefine existing key '${buildPath}'.`, offset);
-      } else if (definedKeys.has(buildPath)) {
-        fail(`Cannot extend inline table '${buildPath}'.`, offset);
-      }
+      if (target[key] === undefined) target[key] = Object.create(null);
+      else if (meta.children[key]?.holdsValue)
+        failAlreadySet(keys.slice(0, depth + 1), offset);
+      meta = ensureChildMeta(meta, key);
       target = target[key] as Record<string, unknown>;
     }
-    const lastKey = keys[keys.length - 1];
-    const fullPath = buildPath ? `${buildPath}.${lastKey}` : lastKey;
-    if (target[lastKey] !== undefined)
-      fail(`Cannot redefine existing key '${fullPath}'.`, offset);
+    const lastKey = keys[lastIndex];
+    if (target[lastKey] !== undefined) failDefinedTwice(keys, offset);
     target[lastKey] = value;
-  };
-
-  // --- Compiler logic ---
-
-  const buildQuotedPath = (keys: string[]): string => {
-    let path = keys[0].indexOf('.') > -1 ? `"${keys[0]}"` : keys[0];
-    for (let depth = 1; depth < keys.length; depth++) {
-      const key = keys[depth];
-      path += '.';
-      path += key.indexOf('.') > -1 ? `"${key}"` : key;
-    }
-    return path;
+    ensureChildMeta(meta, lastKey).holdsValue = true;
   };
 
   const assignKeyValue = (
@@ -966,215 +1139,184 @@ export const parse = <T = unknown>(input: string): T => {
     value: unknown,
     offset: number
   ): void => {
+    const lastIndex = keys.length - 1;
     let target = context;
-    let meta = currentMeta;
-    let buildPath = currentPath;
-    for (let depth = 0; depth < keys.length - 1; depth++) {
+    let meta = contextMeta;
+    for (let depth = 0; depth < lastIndex; depth++) {
       const key = keys[depth];
-      buildPath = buildPath ? `${buildPath}.${key}` : key;
-      let childMeta = meta.children[key];
-
-      if (target[key] === undefined) {
-        target[key] = Object.create(null);
-        if (!childMeta) {
-          childMeta = createMetaNode();
-          meta.children[key] = childMeta;
-        }
-        childMeta.assigned = true;
-      } else if (
-        typeof target[key] !== 'object' ||
-        target[key] === null ||
-        Array.isArray(target[key])
-      ) {
-        fail(`Cannot redefine existing key '${buildPath}'.`, offset);
-      } else if (childMeta?.value) {
-        fail(`Cannot redefine existing key '${buildPath}'.`, offset);
-      } else if (childMeta?.explicit) {
+      const existing = target[key];
+      const known = meta.children[key];
+      if (existing === undefined) target[key] = Object.create(null);
+      else if (
+        typeof existing !== 'object' ||
+        Array.isArray(existing) ||
+        known?.holdsValue
+      )
+        failAlreadySet(contextKeys.concat(keys.slice(0, depth + 1)), offset);
+      else if (known?.explicit)
         fail(
-          `Cannot use dotted keys to extend table '${buildPath}' defined elsewhere.`,
+          'DUPLICATE_KEY',
+          `${quoteInput(formatPath(contextKeys.concat(keys.slice(0, depth + 1))))} already has its own [section], so add this key under that section instead.`,
           offset
         );
-      }
-
-      if (!childMeta) {
-        childMeta = createMetaNode();
-        childMeta.assigned = true;
-        meta.children[key] = childMeta;
-      }
-
+      meta = ensureChildMeta(meta, key);
+      if (existing === undefined || !known) meta.assigned = true;
       target = target[key] as Record<string, unknown>;
-      meta = childMeta;
     }
 
-    const lastKey = keys[keys.length - 1];
-    const fullPath = buildPath ? `${buildPath}.${lastKey}` : lastKey;
-
+    const lastKey = keys[lastIndex];
     if (target[lastKey] !== undefined)
-      fail(`Cannot redefine existing key '${fullPath}'.`, offset);
-
+      failDefinedTwice(contextKeys.concat(keys), offset);
     target[lastKey] = value;
-    let lastMeta = meta.children[lastKey];
-    if (!lastMeta) {
-      lastMeta = createMetaNode();
-      meta.children[lastKey] = lastMeta;
-    }
+    const lastMeta = ensureChildMeta(meta, lastKey);
     lastMeta.assigned = true;
-    lastMeta.value = true;
+    lastMeta.holdsValue = true;
   };
 
-  const deepRef = (
+  const resolveHeader = (
     keys: string[],
-    defaultValue: unknown,
+    levelsBelow: number,
+    offset: number
+  ): MetaNode => {
+    let meta = metaRoot;
+    let depth = levelsBelow;
+    for (const key of keys) {
+      depth += meta.tableArray ? 2 : 1;
+      meta = ensureChildMeta(meta, key);
+    }
+    if (depth > maxDepth) failTooDeep(offset);
+    contextDepth = depth;
+    return meta;
+  };
+
+  const resolveHeaderTarget = (
+    keys: string[],
+    emptyValue: unknown,
     offset: number
   ): unknown => {
-    let current: unknown = root;
+    const lastIndex = keys.length - 1;
+    let table = root;
     let meta = metaRoot;
-
-    for (let depth = 0; depth < keys.length; depth++) {
+    for (let depth = 0; depth < lastIndex; depth++) {
       const key = keys[depth];
-      const childMeta = meta.children[key];
-      const record = current as Record<string, unknown>;
-
-      if (record[key] === undefined) {
-        record[key] =
-          depth === keys.length - 1 ? defaultValue : Object.create(null);
-      } else if (depth !== keys.length - 1 && childMeta.value) {
-        fail(`Cannot redefine existing key '${key}'.`, offset);
-      }
-
-      current = record[key];
-      meta = childMeta;
-
-      if (
-        Array.isArray(current) &&
-        (current as unknown[]).length > 0 &&
-        depth < keys.length - 1
-      ) {
-        current = (current as unknown[])[(current as unknown[]).length - 1];
-      }
+      meta = meta.children[key];
+      if (table[key] === undefined) table[key] = Object.create(null);
+      else if (meta.holdsValue)
+        failAlreadySet(keys.slice(0, depth + 1), offset);
+      const child = table[key];
+      table = (
+        Array.isArray(child) && child.length > 0
+          ? child[child.length - 1]
+          : child
+      ) as Record<string, unknown>;
     }
-
-    return current;
+    const lastKey = keys[lastIndex];
+    if (table[lastKey] === undefined) table[lastKey] = emptyValue;
+    return table[lastKey];
   };
 
   const setTablePath = (keys: string[], offset: number): void => {
-    let meta = metaRoot;
-    for (const key of keys) {
-      if (!meta.children[key]) meta.children[key] = createMetaNode();
-      meta = meta.children[key];
-    }
-
+    const meta = resolveHeader(keys, 0, offset);
     if (meta.assigned)
-      fail(`Cannot redefine existing key '${keys.join('.')}'.`, offset);
-
+      fail(
+        'DUPLICATE_KEY',
+        `${quoteInput(formatPath(keys))} is already defined earlier in the file, so it can't start a new [section] here.`,
+        offset
+      );
     meta.assigned = true;
     meta.explicit = true;
-    context = deepRef(keys, Object.create(null), offset) as Record<
+    context = resolveHeaderTarget(keys, Object.create(null), offset) as Record<
       string,
       unknown
     >;
-    currentPath = buildQuotedPath(keys);
-    currentMeta = meta;
+    contextKeys = keys;
+    contextMeta = meta;
   };
 
   const addTableArray = (keys: string[], offset: number): void => {
-    let meta = metaRoot;
-    for (const key of keys) {
-      if (!meta.children[key]) meta.children[key] = createMetaNode();
-      meta = meta.children[key];
-    }
-
-    if (meta.value)
+    const meta = resolveHeader(keys, 1, offset);
+    if (meta.holdsValue)
       fail(
-        `Cannot append to statically defined array '${buildQuotedPath(keys)}'.`,
+        'DUPLICATE_KEY',
+        `${quoteInput(formatPath(keys))} is already set to a value, so [[ ]] can't add tables to it.`,
         offset
       );
-
     meta.children = Object.create(null);
     meta.assigned = true;
-    meta.value = false;
-    meta.explicit = false;
-
-    const arr = deepRef(keys, [], offset);
-    currentPath = buildQuotedPath(keys);
-
-    if (Array.isArray(arr)) {
-      const newTable: Record<string, unknown> = Object.create(null);
-      (arr as unknown[]).push(newTable);
-      context = newTable;
-    } else {
-      fail(`Cannot redefine existing key '${keys.join('.')}'.`, offset);
-    }
-    currentMeta = meta;
+    meta.tableArray = true;
+    const tables = resolveHeaderTarget(keys, [], offset);
+    if (!Array.isArray(tables))
+      fail(
+        'DUPLICATE_KEY',
+        `${quoteInput(formatPath(keys))} is already defined as a single table, so [[ ]] can't add tables to it.`,
+        offset
+      );
+    const table: Record<string, unknown> = Object.create(null);
+    (tables as unknown[]).push(table);
+    context = table;
+    contextKeys = keys;
+    contextMeta = meta;
   };
 
-  // --- Main loop ---
+  const readTableHeader = (): void => {
+    const offset = pos;
+    pos++;
+    const isArrayTable = pos < len && src.charCodeAt(pos) === LEFT_BRACKET;
+    if (isArrayTable) pos++;
+    skipWhitespace();
+    const keys = readDottedKey(isArrayTable ? maxDepth - 1 : maxDepth);
+    if (!isArrayTable) refuseConstructorTable(keys);
+    skipWhitespace();
+    if (pos >= len || src.charCodeAt(pos) !== RIGHT_BRACKET)
+      fail(
+        'INVALID_TABLE_HEADER',
+        `Expected ] to close this table name, but found ${describeFound()}. Put names with spaces or symbols inside "quotes".`
+      );
+    pos++;
+    if (isArrayTable) {
+      if (pos >= len || src.charCodeAt(pos) !== RIGHT_BRACKET)
+        fail(
+          'INVALID_TABLE_HEADER',
+          `Expected ]] to close this table name, but found ${describeFound()}.`
+        );
+      pos++;
+    }
+    if (!endsLine())
+      fail(
+        'EXPECTED_NEWLINE',
+        `Expected the end of the line after this table name, but found ${describeFound()}. Put the next key on its own line.`
+      );
+    if (isArrayTable) addTableArray(keys, offset);
+    else setTablePath(keys, offset);
+  };
+
+  const readKeyValue = (): void => {
+    const offset = pos;
+    const keys = readAssignedKey(maxDepth - contextDepth + 1);
+    const value = readValue(contextDepth + keys.length);
+    assignKeyValue(keys, value, offset);
+    if (!endsLine())
+      fail(
+        'EXPECTED_NEWLINE',
+        `Expected the end of the line after this value, but found ${describeFound()}. Put each key = value on its own line, and start comments with #.`
+      );
+  };
 
   while (pos < len) {
-    skipWs();
+    skipWhitespace();
     if (pos >= len) break;
-
     const current = src.charCodeAt(pos);
-
-    // Newline
     if (current === LF || current === CR) {
       skipNewline();
       continue;
     }
-
-    // Comment
     if (current === HASH) {
       skipComment();
       if (pos < len) skipNewline();
       continue;
     }
-
-    // Table or array-of-tables
-    if (current === LEFT_BRACKET) {
-      const offset = pos;
-      pos++; // skip [
-      let isArrayTable = false;
-      if (pos < len && src.charCodeAt(pos) === LEFT_BRACKET) {
-        isArrayTable = true;
-        pos++; // skip second [
-      }
-      skipWs();
-      const keys = readDottedKey();
-      skipWs();
-      if (pos >= len || src.charCodeAt(pos) !== RIGHT_BRACKET)
-        fail('Expected ]');
-      pos++;
-      if (isArrayTable) {
-        if (pos >= len || src.charCodeAt(pos) !== RIGHT_BRACKET)
-          fail('Expected ]]');
-        pos++;
-      }
-      skipWs();
-      skipComment();
-      if (!(pos >= len || skipNewline()))
-        fail('Expected newline after table header');
-
-      if (isArrayTable) {
-        addTableArray(keys, offset);
-      } else {
-        setTablePath(keys, offset);
-      }
-      continue;
-    }
-
-    // Key-value assignment
-    const offset = pos;
-    const keys = readDottedKey();
-    skipWs();
-    if (pos >= len || src.charCodeAt(pos) !== EQUALS)
-      fail('Expected = after key');
-    pos++; // skip =
-    skipWs();
-    const value = readValue();
-    assignKeyValue(keys, value, offset);
-    skipWs();
-    skipComment();
-    if (!(pos >= len || skipNewline())) fail('Expected newline after value');
+    if (current === LEFT_BRACKET) readTableHeader();
+    else readKeyValue();
   }
 
   return root as T;

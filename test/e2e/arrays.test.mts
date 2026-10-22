@@ -1,37 +1,48 @@
+import type { Rejection } from '../__helpers__/index.mts';
 import { describe, it, strict } from 'poku';
-import { createRequire } from 'node:module';
-import { parse, read } from '../__helpers__/index.mts';
-
-const require = createRequire(import.meta.url);
-const { parse: parseToml } = require('../../src/index.ts');
+import { assertParsesTo, parse, read } from '../__helpers__/index.mts';
 
 describe('Arrays', () => {
-  it('supports trailing commas', () =>
-    parse(read('arrays--trailing-commas.toml'), {
-      arr: [1, 2, 3],
-    }));
-  it('single element with no trailing comma', () =>
-    parse(read('arrays--single-element.toml'), { a: [1] }));
-  it('empty array', () => parse(read('arrays--empty.toml'), { a: [] }));
-  it('array with whitespace', () =>
-    parse(read('arrays--whitespace.toml'), {
+  it('accepts a trailing comma', () =>
+    assertParsesTo(read('arrays--trailing-commas.toml'), { arr: [1, 2, 3] }));
+
+  it('reads a single element without a trailing comma', () =>
+    assertParsesTo(read('arrays--single-element.toml'), { a: [1] }));
+
+  it('reads an empty array', () =>
+    assertParsesTo(read('arrays--empty.toml'), { a: [] }));
+
+  it('ignores newlines and indentation between elements', () =>
+    assertParsesTo(read('arrays--whitespace.toml'), {
       versions: { files: [3, 5] },
     }));
-  it('empty array with whitespace', () =>
-    parse(read('arrays--empty-whitespace.toml'), {
+
+  it('reads an empty array spread over several lines', () =>
+    assertParsesTo(read('arrays--empty-whitespace.toml'), {
       versions: { files: [] },
     }));
 
-  it('allows mixed-type arrays (TOML v1.0.0)', () =>
-    parse(read('errors--mixed-type-arrays.toml'), {
+  it('mixes value types in one array', () =>
+    assertParsesTo(read('arrays--mixed-types.toml'), {
       data: [1, 2, 'test'],
     }));
 });
 
 describe('Array errors', () => {
-  it('rejects unterminated array', () =>
-    strict.throws(() => parseToml(read('array-errors--unterminated.toml'))));
+  const rejections: Rejection[] = [
+    {
+      name: 'an array that is never closed',
+      fixture: 'array-errors--unterminated.toml',
+      code: 'UNTERMINATED_ARRAY',
+    },
+    {
+      name: 'elements without a comma between them',
+      fixture: 'array-errors--missing-comma.toml',
+      code: 'EXPECTED_COMMA',
+    },
+  ];
 
-  it('rejects missing comma between elements', () =>
-    strict.throws(() => parseToml(read('array-errors--missing-comma.toml'))));
+  for (const { name, fixture, code } of rejections)
+    it(`rejects ${name}`, () =>
+      strict.throws(() => parse(read(fixture)), { name: 'TomlError', code }));
 });
