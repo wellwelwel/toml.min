@@ -11,6 +11,7 @@ const keyPath = (parts: number): string =>
 
 const treeDepth = (value: unknown): number => {
   if (value === null || typeof value !== 'object') return 0;
+
   return 1 + Math.max(0, ...Object.values(value).map(treeDepth));
 };
 
@@ -109,7 +110,6 @@ describe('Nesting depth option', () => {
     Number.POSITIVE_INFINITY,
     '10',
   ];
-
   const parseLoosely = parse as (
     input: string,
     options?: { maxDepth?: unknown }

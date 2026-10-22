@@ -31,6 +31,7 @@ const messageOf = (source: string): string => {
   } catch (error) {
     if (error instanceof TomlError) return error.message;
   }
+
   return strict.fail('Expected a TomlError');
 };
 
@@ -145,7 +146,6 @@ describe('Error codes', () => {
 
 describe('Error message echoes', () => {
   const payload = `${'\u202E'.repeat(50_000)}${'x'.repeat(150_000)}`;
-
   const hostileSources = [
     duplicated(`"${payload}"`),
     `"${payload}" = 1\n"${payload}".b = 2`,
@@ -162,7 +162,6 @@ describe('Error message echoes', () => {
     'a = 1 \u202E',
     'a = "x\uD800y"',
   ];
-
   const hiddenCases: HiddenCase[] = [
     { name: 'NUL', key: '"x\\u0000y"', label: 'U+0000' },
     { name: 'bell', key: '"x\\u0007y"', label: 'U+0007' },
@@ -187,7 +186,6 @@ describe('Error message echoes', () => {
     { name: 'byte order mark', key: '"x\\uFEFFy"', label: 'U+FEFF' },
     { name: 'tag letter', key: '"x\\U000E0041y"', label: 'U+E0041' },
   ];
-
   const foundCases: FoundCase[] = [
     {
       name: 'right-to-left override',

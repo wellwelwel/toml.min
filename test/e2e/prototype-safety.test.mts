@@ -109,8 +109,10 @@ const assertOwnPath = (result: unknown, path: (string | number)[]): void => {
       strict.equal(Object.getPrototypeOf(current), null);
       strict.ok(Object.hasOwn(current, step), `own key ${step}`);
     }
+
     current = Reflect.get(current, step);
   }
+
   strict.equal(current, true);
 };
 

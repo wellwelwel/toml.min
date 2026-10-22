@@ -172,7 +172,6 @@ describe('Lone surrogates', () => {
       parsed: () => ({ a: 1 }),
     },
   ];
-
   const loneSurrogates: TextCase[] = [
     {
       name: 'a high surrogate followed by a regular character',
@@ -189,7 +188,6 @@ describe('Lone surrogates', () => {
       text: 'x😀\uDE00y',
     },
   ];
-
   const surrogatePairs: TextCase[] = [
     {
       name: 'a surrogate pair between regular characters',

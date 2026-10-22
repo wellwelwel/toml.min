@@ -18,13 +18,16 @@ export const {
 
 const isTable = (value: unknown): value is Record<string, unknown> => {
   if (value === null || typeof value !== 'object') return false;
+
   const prototype = Object.getPrototypeOf(value);
+
   return prototype === null || prototype === Object.prototype;
 };
 
 const normalize = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(normalize);
   if (!isTable(value)) return value;
+
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [key, normalize(item)])
   );
