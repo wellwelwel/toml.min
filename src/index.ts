@@ -42,16 +42,20 @@ const RIGHT_BRACKET = 0x5d;
 const UNDERSCORE = 0x5f;
 const CHAR_a = 0x61;
 const CHAR_b = 0x62;
+const CHAR_c = 0x63;
 const CHAR_e = 0x65;
 const CHAR_f = 0x66;
+const CHAR_h = 0x68;
 const CHAR_i = 0x69;
 const CHAR_l = 0x6c;
 const CHAR_n = 0x6e;
 const CHAR_o = 0x6f;
+const CHAR_p = 0x70;
 const CHAR_r = 0x72;
 const CHAR_s = 0x73;
 const CHAR_t = 0x74;
 const CHAR_u = 0x75;
+const CHAR_v = 0x76;
 const CHAR_x = 0x78;
 const CHAR_z = 0x7a;
 const LEFT_BRACE = 0x7b;
@@ -187,6 +191,33 @@ const isBareKeyCharacter = (code: number): boolean =>
   (code >= ZERO && code <= NINE) ||
   code === DASH ||
   code === UNDERSCORE;
+
+// A Set lookup here hashes every table key and measured about 2% slower on the benchmark.
+const isInheritedKey = (key: string): boolean => {
+  switch (key.charCodeAt(0)) {
+    case CHAR_c:
+      return key === 'constructor';
+    case CHAR_h:
+      return key === 'hasOwnProperty';
+    case CHAR_i:
+      return key === 'isPrototypeOf';
+    case CHAR_p:
+      return key === 'propertyIsEnumerable';
+    case CHAR_t:
+      return key === 'toString' || key === 'toLocaleString';
+    case CHAR_v:
+      return key === 'valueOf';
+    case UNDERSCORE:
+      return (
+        key === '__defineGetter__' ||
+        key === '__defineSetter__' ||
+        key === '__lookupGetter__' ||
+        key === '__lookupSetter__'
+      );
+    default:
+      return false;
+  }
+};
 
 const isForbiddenControlCharacter = (code: number): boolean =>
   (code < SPACE && code !== TAB) || code === DEL;
@@ -423,11 +454,11 @@ const failUnterminatedInlineTable = (
     start
   );
 
-const failConstructorTable = (state: ParserState): never =>
+const failInheritedKeyTable = (state: ParserState, key: string): never =>
   fail(
     state,
     'INVALID_KEY',
-    `"constructor" can't hold a table, because merging the result into another object could change the built-in Object shared by the whole program. Give it a plain value, or rename it.`,
+    `${quoteInput(key)} can't hold a table, because merging the result into another object could change a built-in shared by the whole program. Give it a plain value, or rename it.`,
     state.lastKeyOffset
   );
 
@@ -497,6 +528,15 @@ const endsLine = (state: ParserState): boolean => {
   skipComment(state);
 
   return state.position >= state.length || skipNewline(state);
+};
+
+const startsText = (state: ParserState): boolean => {
+  const { source, position } = state;
+
+  return (
+    position < state.length &&
+    !isForbiddenCharacter(source, position, source.charCodeAt(position))
+  );
 };
 
 const joinParts = (parts: string[] | undefined, last: string): string => {
@@ -728,6 +768,15 @@ const readMultilineString = (state: ParserState, quote: number): string => {
 
       if (next === LF || next === CR || next === SPACE || next === TAB) {
         state.position++;
+        skipWhitespace(state);
+
+        if (!skipNewline(state) && startsText(state))
+          fail(
+            state,
+            'INVALID_ESCAPE',
+            'A backslash followed by spaces or tabs must be the last thing on its line. Move the text after it to the next line, or write \\\\ for a backslash.',
+            position
+          );
 
         do skipWhitespace(state);
         while (skipNewline(state));
@@ -796,9 +845,11 @@ const readSimpleKey = (state: ParserState): string => {
   return readSingleLineString(state, current);
 };
 
-const refuseConstructorTable = (state: ParserState, keys: string[]): void => {
-  if (!state.allowUnsafeKeys && keys[keys.length - 1] === 'constructor')
-    failConstructorTable(state);
+const refuseInheritedKeyTable = (state: ParserState, keys: string[]): void => {
+  const lastKey = keys[keys.length - 1];
+
+  if (!state.allowUnsafeKeys && isInheritedKey(lastKey))
+    failInheritedKeyTable(state, lastKey);
 };
 
 const readKeyPart = (
@@ -832,7 +883,7 @@ const readDottedKey = (state: ParserState, maxParts: number): string[] => {
     state.position < state.length &&
     state.source.charCodeAt(state.position) === DOT
   ) {
-    refuseConstructorTable(state, keys);
+    refuseInheritedKeyTable(state, keys);
     state.position++;
     skipWhitespace(state);
     keys.push(readKeyPart(state, keys.length, maxParts));
@@ -864,7 +915,7 @@ const readAssignedKey = (state: ParserState, maxParts: number): string[] => {
   readEqualsSign(state);
 
   if (state.source.charCodeAt(state.position) === LEFT_BRACE)
-    refuseConstructorTable(state, keys);
+    refuseInheritedKeyTable(state, keys);
 
   return keys;
 };
@@ -1849,7 +1900,7 @@ const readTableHeader = (state: ParserState): void => {
     isArrayTable ? state.maxDepth - 1 : state.maxDepth
   );
 
-  if (!isArrayTable) refuseConstructorTable(state, keys);
+  if (!isArrayTable) refuseInheritedKeyTable(state, keys);
 
   skipWhitespace(state);
 

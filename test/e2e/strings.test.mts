@@ -235,6 +235,16 @@ describe('Multiline string edge cases', () => {
       fixture: 'multiline-edge-cases--ending-backslash.toml',
       code: 'UNTERMINATED_STRING',
     },
+    {
+      name: 'a backslash followed by whitespace and then text on the same line',
+      fixture: 'multiline-edge-cases--backslash-whitespace-no-newline.toml',
+      code: 'INVALID_ESCAPE',
+    },
+    {
+      name: 'a backslash followed by a space and then the closing quotes',
+      fixture: 'multiline-edge-cases--backslash-space-then-closing-quotes.toml',
+      code: 'INVALID_ESCAPE',
+    },
   ];
 
   it('drops a CRLF right after a line-ending backslash', () =>
@@ -254,10 +264,16 @@ describe('Multiline string edge cases', () => {
       { a: 'hello' }
     ));
 
-  it('drops whitespace after a backslash even when no newline follows', () =>
+  it('drops spaces and tabs between a line-ending backslash and its newline', () =>
     assertParsesTo(
-      read('multiline-edge-cases--backslash-whitespace-no-newline.toml'),
-      { a: 'x\n' }
+      read('multiline-edge-cases--backslash-trailing-whitespace.toml'),
+      { a: 'hello world' }
+    ));
+
+  it('drops spaces and tabs between a line-ending backslash and its CRLF', () =>
+    assertParsesTo(
+      read('multiline-edge-cases--backslash-trailing-whitespace-crlf.toml'),
+      { a: 'hello world' }
     ));
 
   for (const { name, fixture, code } of rejections)

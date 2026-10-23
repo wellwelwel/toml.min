@@ -89,7 +89,7 @@ parse(source, { maxDepth: 100, bigint: false, allowUnsafeKeys: false });
 | ----------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `maxDepth`        | `100`   | How deep tables and arrays can nest below the root, however they are written. Must be an integer from `0` to `1000`. See [Untrusted Input](#untrusted-input). |
 | `bigint`          | `false` | Returns integers as `BigInt`. See [Integers](#integers).                                                                                                      |
-| `allowUnsafeKeys` | `false` | Accepts `__proto__` keys and `constructor` keys holding a table. See [Untrusted Input](#untrusted-input).                                                     |
+| `allowUnsafeKeys` | `false` | Accepts `__proto__` keys, and keys named after other `Object.prototype` members holding a table. See [Untrusted Input](#untrusted-input).                     |
 
 ---
 
@@ -273,7 +273,7 @@ try {
 
 - `maxDepth` stops a hostile file from exhausting the call stack, in the parser or in your code that walks the result. Its ceiling of `1000` stays below the shallowest overflow measured (about 1,800 nested inline tables on **Node.js** 22).
 - `parse` doesn't limit input size, and its work grows linearly with it, so cap the size of untrusted input before parsing.
-- Every table has a `null` prototype, so parsing never changes a shared prototype. **TOML** allows `__proto__` keys and `constructor` keys holding a table, but the parser refuses both with `INVALID_KEY`, because copying the result with `Object.assign` or a deep merge can turn them into prototype changes. A `constructor` key holding any other value is accepted. With `allowUnsafeKeys`, copy results with spread (`{ ...result }`) and merge them only with code that skips both keys.
+- Every table has a `null` prototype, so parsing never changes a shared prototype. **TOML** allows `__proto__` keys, and keys named after any other `Object.prototype` member (such as `constructor`, `toString`, or `hasOwnProperty`) holding a table, but the parser refuses them with `INVALID_KEY`, because copying the result with `Object.assign` or a deep merge can turn them into prototype changes or rewrite built-in methods. Those names holding any other value, an array of tables included, are accepted. With `allowUnsafeKeys`, copy results with spread (`{ ...result }`) and merge them only with code that skips these keys.
 - Strings and quoted keys can hold control characters through escapes such as `\e` and `\x00` (NUL), and bidirectional marks such as U+202E even when written raw. Escape or strip both before writing parsed values to a terminal or log or passing them as command arguments, and reject NUL before passing a value to code that treats it as the end of a string.
 - Keys are compared without Unicode normalization, so lookalike keys, such as one with a zero-width space or a decomposed accent, stay distinct. When reviewing files from untrusted authors, flag invisible or decomposed characters in quoted keys.
 - Error messages are short and safe to display. See [Error Handling](#error-handling).

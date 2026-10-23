@@ -12,11 +12,31 @@ type Route = {
 
 type Spelling = { name: string; write: (key: string) => string };
 
-type ValueCase = { name: string; source: string; expected: unknown };
+type HeldValue = {
+  name: string;
+  source: (key: string) => string;
+  expected: (key: string) => unknown;
+};
 
 const INERT_KEYS = ['prototype'];
-const UNSAFE_KEYS = ['__proto__', 'constructor'];
-const UNSAFE_SOURCES = ['__proto__ = true', 'constructor.a = true'];
+const TABLE_UNSAFE_KEYS = [
+  'constructor',
+  'toString',
+  'valueOf',
+  'hasOwnProperty',
+  'isPrototypeOf',
+  'propertyIsEnumerable',
+  'toLocaleString',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+];
+const UNSAFE_KEYS = ['__proto__', ...TABLE_UNSAFE_KEYS];
+const UNSAFE_SOURCES = [
+  '__proto__ = true',
+  ...TABLE_UNSAFE_KEYS.map((key) => `${key}.a = true`),
+];
 const NOT_ALLOWING: unknown[] = [false, 'true', 1];
 const LOOKALIKE_KEYS = [
   '__proto',
@@ -28,51 +48,51 @@ const LOOKALIKE_KEYS = [
   ' constructor',
 ];
 
-const CONSTRUCTOR_VALUES: ValueCase[] = [
+const HELD_VALUES: HeldValue[] = [
   {
     name: 'text',
-    source: 'constructor = "init"',
-    expected: { constructor: 'init' },
+    source: (key) => `${key} = "init"`,
+    expected: (key) => ({ [key]: 'init' }),
   },
   {
     name: 'an integer',
-    source: 'constructor = 1',
-    expected: { constructor: 1 },
+    source: (key) => `${key} = 1`,
+    expected: (key) => ({ [key]: 1 }),
   },
   {
     name: 'a boolean',
-    source: 'constructor = true',
-    expected: { constructor: true },
+    source: (key) => `${key} = true`,
+    expected: (key) => ({ [key]: true }),
   },
   {
     name: 'an array',
-    source: 'constructor = ["a", "b"]',
-    expected: { constructor: ['a', 'b'] },
+    source: (key) => `${key} = ["a", "b"]`,
+    expected: (key) => ({ [key]: ['a', 'b'] }),
   },
   {
     name: 'an array of inline tables',
-    source: 'constructor = [{ a = 1 }]',
-    expected: { constructor: [{ a: 1 }] },
+    source: (key) => `${key} = [{ a = 1 }]`,
+    expected: (key) => ({ [key]: [{ a: 1 }] }),
   },
   {
     name: 'an array of tables',
-    source: '[[constructor]]\na = 1',
-    expected: { constructor: [{ a: 1 }] },
+    source: (key) => `[[${key}]]\na = 1`,
+    expected: (key) => ({ [key]: [{ a: 1 }] }),
   },
   {
     name: 'text at the end of a dotted key',
-    source: 'a.constructor = "init"',
-    expected: { a: { constructor: 'init' } },
+    source: (key) => `a.${key} = "init"`,
+    expected: (key) => ({ a: { [key]: 'init' } }),
   },
   {
     name: 'text in a headed table',
-    source: '[a]\nconstructor = "init"',
-    expected: { a: { constructor: 'init' } },
+    source: (key) => `[a]\n${key} = "init"`,
+    expected: (key) => ({ a: { [key]: 'init' } }),
   },
   {
     name: 'text in an inline table',
-    source: 'a = { constructor = "init" }',
-    expected: { a: { constructor: 'init' } },
+    source: (key) => `a = { ${key} = "init" }`,
+    expected: (key) => ({ a: { [key]: 'init' } }),
   },
 ];
 
@@ -234,9 +254,10 @@ describe('Prototype safety', () => {
       }
     }
 
-  for (const { name, source, expected } of CONSTRUCTOR_VALUES)
-    it(`keeps constructor holding ${name}`, () =>
-      assertParsesTo(source, expected));
+  for (const key of TABLE_UNSAFE_KEYS)
+    for (const { name, source, expected } of HELD_VALUES)
+      it(`keeps ${key} holding ${name}`, () =>
+        assertParsesTo(source(key), expected(key)));
 
   for (const value of NOT_ALLOWING)
     for (const source of UNSAFE_SOURCES)
@@ -252,11 +273,12 @@ describe('Prototype safety', () => {
       { name: 'TomlError', code: 'DUPLICATE_KEY', line: 2, column: 1 }
     ));
 
-  it('refuses [constructor.prototype] after [[constructor]]', () =>
-    strict.throws(
-      () => parse('[[constructor]]\n[constructor.prototype]\npolluted = true'),
-      { name: 'TomlError', code: 'INVALID_KEY', line: 2, column: 2 }
-    ));
+  for (const key of TABLE_UNSAFE_KEYS)
+    it(`refuses [${key}.prototype] after [[${key}]]`, () =>
+      strict.throws(
+        () => parse(`[[${key}]]\n[${key}.prototype]\npolluted = true`),
+        { name: 'TomlError', code: 'INVALID_KEY', line: 2, column: 2 }
+      ));
 
   for (const key of LOOKALIKE_KEYS)
     it(`keeps the lookalike "${key}" as an ordinary own key`, () =>
