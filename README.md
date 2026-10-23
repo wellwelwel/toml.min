@@ -316,7 +316,7 @@ Measured with [**hyperfine**](https://github.com/sharkdp/hyperfine) parsing the 
 
 | Parser                                                                        | Times slower than **toml.min** |
 | ----------------------------------------------------------------------------- | ------------------------------ |
-| ✨ **toml.min** `1.0.0`                                                       | **1.00x** _(baseline)_         |
+| ✨ **toml.min** `2.0.0`                                                       | **1.00x** _(baseline)_         |
 | [smol-toml](https://github.com/squirrelchat/smol-toml) `1.9.1`                | 1.11x ↓                        |
 | [toml-eslint-parser](https://github.com/ota-meshi/toml-eslint-parser) `1.0.3` | 5.90x ↓                        |
 | [@decimalturn/toml-patch](https://github.com/DecimalTurn/toml-patch) `3.3.1`  | 6.95x ↓                        |
