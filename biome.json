@@ -7,7 +7,8 @@
       "lib",
       "browser",
       "benchmark",
-      "coverage-reports"
+      "coverage-reports",
+      ".lagune"
     ]
   },
   "linter": {
@@ -57,7 +58,11 @@
         "noNamespaceImport": "off",
         "noDefaultExport": "error",
         "useBlockStatements": "off",
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": { "deniedGlobals": ["Function"] }
+        }
       }
     }
   },

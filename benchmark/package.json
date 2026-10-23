@@ -8,9 +8,9 @@
     "benchmark": "npm run toml && npm run toml-eslint-parser && npm run smol-toml && npm run toml-patch"
   },
   "dependencies": {
-    "@decimalturn/toml-patch": "^1.0.5",
-    "smol-toml": "^1.7.1",
-    "toml": "^4.2.0",
+    "@decimalturn/toml-patch": "^3.3.1",
+    "smol-toml": "^1.9.1",
+    "toml": "^5.0.1",
     "toml-eslint-parser": "^1.0.3",
     "toml.min": "file:.."
   }
