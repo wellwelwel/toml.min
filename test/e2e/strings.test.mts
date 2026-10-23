@@ -114,6 +114,11 @@ describe('Escape sequences', () => {
       fixture: 'escape-sequences--surrogate.toml',
       code: 'INVALID_ESCAPE',
     },
+    {
+      name: 'a \\U escape past the last Unicode code point',
+      fixture: 'escape-sequences--past-last-code-point.toml',
+      code: 'INVALID_ESCAPE',
+    },
   ];
 
   it('decodes \\b as a backspace', () =>

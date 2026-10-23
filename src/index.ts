@@ -64,6 +64,7 @@ const BOM = 0xfeff;
 const MAX_CODE_POINT = 0x10ffff;
 
 const DEFAULT_MAX_DEPTH = 100;
+const MAX_DEPTH_CEILING = 1000;
 const ECHO_LIMIT = 40;
 const MAX_INTEGER_DIGITS = 64;
 const MAX_EXACT_DIGITS = 15;
@@ -239,13 +240,19 @@ const hexCode = (codePoint: number): string =>
 
 const codePointName = (codePoint: number): string => `U+${hexCode(codePoint)}`;
 
+const echoCharacter = (character: string): string => {
+  if (HIDDEN_CHARACTER.test(character))
+    return `[${codePointName(character.codePointAt(0)!)}]`;
+  if (character === '"' || character === '\\') return `\\${character}`;
+
+  return character;
+};
+
 const quoteInput = (text: string): string => {
   let shown = '';
 
   for (const character of text) {
-    const visible = HIDDEN_CHARACTER.test(character)
-      ? `[${codePointName(character.codePointAt(0)!)}]`
-      : character;
+    const visible = echoCharacter(character);
 
     if (shown.length + visible.length > ECHO_LIMIT) return `"${shown}…"`;
 
@@ -1038,6 +1045,14 @@ const scanTime = (state: ParserState): number => {
     source.charCodeAt(position) === DOT &&
     isDigit(source.charCodeAt(position + 1))
   ) {
+    if (clockLength === SHORT_TIME_LENGTH)
+      fail(
+        state,
+        'INVALID_TIME',
+        'This time has a fraction of a second but no seconds. Add the seconds, as in 07:32:00.5.',
+        position
+      );
+
     position += 2;
 
     while (isDigit(source.charCodeAt(position))) position++;
@@ -1919,8 +1934,14 @@ export const parse = <T = unknown>(
 
   const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DEPTH;
 
-  if (!Number.isSafeInteger(maxDepth) || maxDepth < 0)
-    throw new TypeError('maxDepth must be a non-negative integer');
+  if (
+    !Number.isSafeInteger(maxDepth) ||
+    maxDepth < 0 ||
+    maxDepth > MAX_DEPTH_CEILING
+  )
+    throw new TypeError(
+      `maxDepth must be an integer from 0 to ${MAX_DEPTH_CEILING}`
+    );
 
   const source = input.charCodeAt(0) === BOM ? input.slice(1) : input;
   const root: Record<string, unknown> = Object.create(null);

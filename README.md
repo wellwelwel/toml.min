@@ -85,11 +85,11 @@ data.database.enabled; // true
 parse(source, { maxDepth: 100, bigint: false, allowUnsafeKeys: false });
 ```
 
-| Option            | Default | Description                                                                                                                                            |
-| ----------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `maxDepth`        | `100`   | How deep tables and arrays can nest below the root, however they are written. Must be a non-negative integer. See [Untrusted Input](#untrusted-input). |
-| `bigint`          | `false` | Returns integers as `BigInt`. See [Integers](#integers).                                                                                               |
-| `allowUnsafeKeys` | `false` | Accepts `__proto__` keys and `constructor` keys holding a table. See [Untrusted Input](#untrusted-input).                                              |
+| Option            | Default | Description                                                                                                                                                   |
+| ----------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `maxDepth`        | `100`   | How deep tables and arrays can nest below the root, however they are written. Must be an integer from `0` to `1000`. See [Untrusted Input](#untrusted-input). |
+| `bigint`          | `false` | Returns integers as `BigInt`. See [Integers](#integers).                                                                                                      |
+| `allowUnsafeKeys` | `false` | Accepts `__proto__` keys and `constructor` keys holding a table. See [Untrusted Input](#untrusted-input).                                                     |
 
 ---
 
@@ -137,6 +137,8 @@ positive_inf = inf
 negative_inf = -inf
 not_a_number = nan
 ```
+
+Floats are returned as numbers, so one too large, such as `1e400`, becomes `Infinity`. Check untrusted floats with `Number.isFinite` before using them as limits or timeouts.
 
 ### Booleans
 
@@ -237,7 +239,7 @@ try {
 ```
 
 - `message` is plain language and can change in any release, so match on `code` to tell errors apart or to write your own messages.
-- Messages are at most 300 characters. Quoted keys and values are cut to 40 characters (marked with `…`), and control, invisible, and bidirectional characters, as well as lone surrogates, appear as code points such as `[U+202E]`.
+- Messages are at most 300 characters, and any key or value they quote is cut to 40 characters (marked with `…`). Quoted text escapes `"` and `\`, and shows control, invisible, and bidirectional characters, as well as lone surrogates, as code points such as `[U+202E]`.
 - A source that is not a string, or an invalid option, throws a `TypeError` instead.
 
 ### Error Codes
@@ -256,7 +258,7 @@ try {
 | `INVALID_KEY`               | A key is missing, triple-quoted, unquoted when it needs quotes, or unsafe. See [Untrusted Input](#untrusted-input). |
 | `INVALID_NUMBER`            | A number is malformed, such as `007` or `1__000`.                                                                   |
 | `INVALID_TABLE_HEADER`      | A table header is not closed with `]` or `]]`.                                                                      |
-| `INVALID_TIME`              | A time or time zone offset doesn't exist, such as `24:00:00`.                                                       |
+| `INVALID_TIME`              | A time or time zone offset is invalid, such as `24:00:00` or `07:32.5` (a fraction without seconds).                |
 | `INVALID_VALUE`             | A value is invalid, such as unquoted text.                                                                          |
 | `LONE_SURROGATE`            | A comment or string contains a lone surrogate, which is invalid Unicode.                                            |
 | `NESTING_TOO_DEEP`          | Tables and arrays nest deeper than `maxDepth`.                                                                      |
@@ -269,9 +271,11 @@ try {
 
 ## Untrusted Input
 
-- `maxDepth` stops a hostile file from exhausting the call stack, in the parser or in your code that walks the result. The default is far below the shallowest overflow measured (about 2,300 nested inline tables on **Node.js**), and raising it into the thousands brings that risk back.
+- `maxDepth` stops a hostile file from exhausting the call stack, in the parser or in your code that walks the result. Its ceiling of `1000` stays below the shallowest overflow measured (about 1,800 nested inline tables on **Node.js** 22).
+- `parse` doesn't limit input size, and its work grows linearly with it, so cap the size of untrusted input before parsing.
 - Every table has a `null` prototype, so parsing never changes a shared prototype. **TOML** allows `__proto__` keys and `constructor` keys holding a table, but the parser refuses both with `INVALID_KEY`, because copying the result with `Object.assign` or a deep merge can turn them into prototype changes. A `constructor` key holding any other value is accepted. With `allowUnsafeKeys`, copy results with spread (`{ ...result }`) and merge them only with code that skips both keys.
-- Escapes such as `\e` and `\x00` let strings and quoted keys hold control characters, including NUL. The parser rejects them only when written raw, so check the parsed values: escape or strip control characters before writing them to a terminal or log or passing them as command arguments, and reject NUL before passing a value to code that treats it as the end of a string.
+- Strings and quoted keys can hold control characters through escapes such as `\e` and `\x00` (NUL), and bidirectional marks such as U+202E even when written raw. Escape or strip both before writing parsed values to a terminal or log or passing them as command arguments, and reject NUL before passing a value to code that treats it as the end of a string.
+- Keys are compared without Unicode normalization, so lookalike keys, such as one with a zero-width space or a decomposed accent, stay distinct. When reviewing files from untrusted authors, flag invisible or decomposed characters in quoted keys.
 - Error messages are short and safe to display. See [Error Handling](#error-handling).
 
 ---

@@ -164,6 +164,11 @@ describe('BigInt integers', () => {
     '10_000_000_000_000_000_000',
     '9'.repeat(200_000),
   ];
+  const notEnabling: unknown[] = ['true', 'false', 1];
+  const parseLoosely = parse as (
+    input: string,
+    options: { bigint?: unknown }
+  ) => Record<string, unknown>;
 
   it('reads the whole 64-bit range exactly', () => {
     const result = parse<Record<string, bigint>>(
@@ -196,4 +201,17 @@ describe('BigInt integers', () => {
         line: 1,
         column: 5,
       }));
+
+  for (const value of notEnabling)
+    it(`keeps integers as numbers when bigint is ${JSON.stringify(value)}`, () =>
+      strict.equal(parseLoosely('a = 1', { bigint: value }).a, 1));
+
+  for (const prefix of ['0x', '0o', '0b'])
+    it(`accepts ${prefix} integers padded with leading zeros`, () =>
+      strict.equal(
+        parse<Record<string, bigint>>(`a = ${prefix}${'0'.repeat(100)}1`, {
+          bigint: true,
+        }).a,
+        1n
+      ));
 });

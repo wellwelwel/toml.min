@@ -1,5 +1,6 @@
 import type { TomlErrorCode } from '../../src/index.ts';
 import { describe, it, strict } from 'poku';
+import { Buffer } from 'node:buffer';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +23,8 @@ type FoundCase = {
 };
 
 type EchoCase = { name: string; source: string; quoted: string };
+
+type NonStringCase = { name: string; input: unknown };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MESSAGE_LIMIT = 300;
@@ -87,6 +90,10 @@ describe('Error codes', () => {
       column: 5,
     },
   ];
+  const nonStrings: NonStringCase[] = [
+    { name: 'a number', input: 42 },
+    { name: 'a Buffer holding valid TOML', input: Buffer.from('a = 1') },
+  ];
 
   for (const { code, source, line, column } of cases)
     it(`reports ${code} with its line and column`, () =>
@@ -100,11 +107,12 @@ describe('Error codes', () => {
           error.column === column
       ));
 
-  it('reports a TypeError, not a TomlError, for input that is not a string', () =>
-    strict.throws(
-      () => (parse as (input: unknown) => unknown)(42),
-      (error) => error instanceof TypeError && !(error instanceof TomlError)
-    ));
+  for (const { name, input } of nonStrings)
+    it(`reports a TypeError, not a TomlError, for ${name} instead of a string`, () =>
+      strict.throws(
+        () => (parse as (input: unknown) => unknown)(input),
+        (error) => error instanceof TypeError && !(error instanceof TomlError)
+      ));
 
   it('points at the comment that takes the place of a missing value', () =>
     strict.throws(() => parse('a = # TODO'), {
@@ -230,6 +238,15 @@ describe('Error message echoes', () => {
     },
     { name: 'an unknown escape', source: 'a = "\\q"', quoted: '"\\\\q"' },
   ];
+  const SECRET = 'hunter2';
+  const secretSources = [
+    `password = "${SECRET}" x`,
+    `password = '${SECRET}' x`,
+    `password = """${SECRET}""" x`,
+    `password = "${SECRET}\\q"`,
+    `password = "${SECRET}\u0007"`,
+    `password = "${SECRET}`,
+  ];
 
   it('clips a 200,000-character key with a visible mark', () => {
     const key = 'k'.repeat(200_000);
@@ -272,4 +289,11 @@ describe('Error message echoes', () => {
 
       strict.ok(message.includes(quoted), message);
     });
+
+  it('keeps string values out of every message', () => {
+    const messages = secretSources.map(messageOf);
+
+    for (const message of messages)
+      strict.ok(!message.includes(SECRET), message);
+  });
 });

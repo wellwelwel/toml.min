@@ -252,6 +252,12 @@ describe('Prototype safety', () => {
       { name: 'TomlError', code: 'DUPLICATE_KEY', line: 2, column: 1 }
     ));
 
+  it('refuses [constructor.prototype] after [[constructor]]', () =>
+    strict.throws(
+      () => parse('[[constructor]]\n[constructor.prototype]\npolluted = true'),
+      { name: 'TomlError', code: 'INVALID_KEY', line: 2, column: 2 }
+    ));
+
   for (const key of LOOKALIKE_KEYS)
     it(`keeps the lookalike "${key}" as an ordinary own key`, () =>
       assertOwnPath(parse(`"${key}".polluted = true`), [key, 'polluted']));

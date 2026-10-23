@@ -129,6 +129,11 @@ describe('Table path conflicts', () => {
       code: 'DUPLICATE_KEY',
     },
     {
+      name: 'a table header over an array of tables',
+      fixture: 'table-path-conflicts--table-over-array-of-tables.toml',
+      code: 'DUPLICATE_KEY',
+    },
+    {
       name: 'a table header without ]',
       fixture: 'table-path-conflicts--missing-bracket.toml',
       code: 'INVALID_TABLE_HEADER',
