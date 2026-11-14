@@ -14,8 +14,8 @@ export type {
 } from './types.js';
 
 const TAB = 0x09;
-const LF = 0x0a;
-const CR = 0x0d;
+const LINE_FEED = 0x0a;
+const CARRIAGE_RETURN = 0x0d;
 const SPACE = 0x20;
 const DOUBLE_QUOTE = 0x22;
 const HASH = 0x23;
@@ -30,41 +30,41 @@ const SEVEN = 0x37;
 const NINE = 0x39;
 const COLON = 0x3a;
 const EQUALS = 0x3d;
-const CHAR_A = 0x41;
-const CHAR_E = 0x45;
-const CHAR_F = 0x46;
-const CHAR_T = 0x54;
-const CHAR_U = 0x55;
-const CHAR_Z = 0x5a;
+const UPPERCASE_A = 0x41;
+const UPPERCASE_E = 0x45;
+const UPPERCASE_F = 0x46;
+const UPPERCASE_T = 0x54;
+const UPPERCASE_U = 0x55;
+const UPPERCASE_Z = 0x5a;
 const LEFT_BRACKET = 0x5b;
 const BACKSLASH = 0x5c;
 const RIGHT_BRACKET = 0x5d;
 const UNDERSCORE = 0x5f;
-const CHAR_a = 0x61;
-const CHAR_b = 0x62;
-const CHAR_c = 0x63;
-const CHAR_e = 0x65;
-const CHAR_f = 0x66;
-const CHAR_h = 0x68;
-const CHAR_i = 0x69;
-const CHAR_l = 0x6c;
-const CHAR_n = 0x6e;
-const CHAR_o = 0x6f;
-const CHAR_p = 0x70;
-const CHAR_r = 0x72;
-const CHAR_s = 0x73;
-const CHAR_t = 0x74;
-const CHAR_u = 0x75;
-const CHAR_v = 0x76;
-const CHAR_x = 0x78;
-const CHAR_z = 0x7a;
+const LOWERCASE_A = 0x61;
+const LOWERCASE_B = 0x62;
+const LOWERCASE_C = 0x63;
+const LOWERCASE_E = 0x65;
+const LOWERCASE_F = 0x66;
+const LOWERCASE_H = 0x68;
+const LOWERCASE_I = 0x69;
+const LOWERCASE_L = 0x6c;
+const LOWERCASE_N = 0x6e;
+const LOWERCASE_O = 0x6f;
+const LOWERCASE_P = 0x70;
+const LOWERCASE_R = 0x72;
+const LOWERCASE_S = 0x73;
+const LOWERCASE_T = 0x74;
+const LOWERCASE_U = 0x75;
+const LOWERCASE_V = 0x76;
+const LOWERCASE_X = 0x78;
+const LOWERCASE_Z = 0x7a;
 const LEFT_BRACE = 0x7b;
 const RIGHT_BRACE = 0x7d;
-const DEL = 0x7f;
+const DELETE = 0x7f;
 const HIGH_SURROGATE_START = 0xd800;
 const LOW_SURROGATE_START = 0xdc00;
 const LOW_SURROGATE_END = 0xdfff;
-const BOM = 0xfeff;
+const BYTE_ORDER_MARK = 0xfeff;
 const MAX_CODE_POINT = 0x10ffff;
 
 const DEFAULT_MAX_DEPTH = 100;
@@ -86,7 +86,7 @@ const RADIX_PREFIXES: Record<number, string> = {
 };
 
 const DECIMAL_DIGIT = 'a digit (0-9)';
-const HEX_DIGIT = 'a hexadecimal digit (0-9, A-F)';
+const HEXADECIMAL_DIGIT = 'a hexadecimal digit (0-9, A-F)';
 const OCTAL_DIGIT = 'an octal digit (0-7)';
 const BINARY_DIGIT = 'a binary digit (0 or 1)';
 
@@ -151,16 +151,16 @@ class TableMeta implements MetaNode {
 
 const isDigit = (code: number): boolean => code >= ZERO && code <= NINE;
 
-const isHexDigit = (code: number): boolean =>
+const isHexadecimalDigit = (code: number): boolean =>
   isDigit(code) ||
-  (code >= CHAR_A && code <= CHAR_F) ||
-  (code >= CHAR_a && code <= CHAR_f);
+  (code >= UPPERCASE_A && code <= UPPERCASE_F) ||
+  (code >= LOWERCASE_A && code <= LOWERCASE_F);
 
-const hexValue = (code: number): number => {
+const hexadecimalValue = (code: number): number => {
   if (code <= NINE) return code - ZERO;
-  if (code <= CHAR_F) return code - CHAR_A + 10;
+  if (code <= UPPERCASE_F) return code - UPPERCASE_A + 10;
 
-  return code - CHAR_a + 10;
+  return code - LOWERCASE_A + 10;
 };
 
 const isOctalDigit = (code: number): boolean => code >= ZERO && code <= SEVEN;
@@ -169,8 +169,8 @@ const isBinaryDigit = (code: number): boolean => code === ZERO || code === ONE;
 
 const HEXADECIMAL: DigitRule = {
   radix: 16,
-  isAllowedDigit: isHexDigit,
-  digitName: HEX_DIGIT,
+  isAllowedDigit: isHexadecimalDigit,
+  digitName: HEXADECIMAL_DIGIT,
 };
 
 const OCTAL: DigitRule = {
@@ -186,26 +186,26 @@ const BINARY: DigitRule = {
 };
 
 const isBareKeyCharacter = (code: number): boolean =>
-  (code >= CHAR_A && code <= CHAR_Z) ||
-  (code >= CHAR_a && code <= CHAR_z) ||
+  (code >= UPPERCASE_A && code <= UPPERCASE_Z) ||
+  (code >= LOWERCASE_A && code <= LOWERCASE_Z) ||
   (code >= ZERO && code <= NINE) ||
   code === DASH ||
   code === UNDERSCORE;
 
 // A Set lookup here hashes every table key and measured about 2% slower on the benchmark.
-const isInheritedKey = (key: string): boolean => {
+const isTableUnsafeKey = (key: string): boolean => {
   switch (key.charCodeAt(0)) {
-    case CHAR_c:
+    case LOWERCASE_C:
       return key === 'constructor';
-    case CHAR_h:
+    case LOWERCASE_H:
       return key === 'hasOwnProperty';
-    case CHAR_i:
+    case LOWERCASE_I:
       return key === 'isPrototypeOf';
-    case CHAR_p:
-      return key === 'propertyIsEnumerable';
-    case CHAR_t:
+    case LOWERCASE_P:
+      return key === 'prototype' || key === 'propertyIsEnumerable';
+    case LOWERCASE_T:
       return key === 'toString' || key === 'toLocaleString';
-    case CHAR_v:
+    case LOWERCASE_V:
       return key === 'valueOf';
     case UNDERSCORE:
       return (
@@ -220,7 +220,7 @@ const isInheritedKey = (key: string): boolean => {
 };
 
 const isForbiddenControlCharacter = (code: number): boolean =>
-  (code < SPACE && code !== TAB) || code === DEL;
+  (code < SPACE && code !== TAB) || code === DELETE;
 
 const isHighSurrogate = (code: number): boolean =>
   code >= HIGH_SURROGATE_START && code < LOW_SURROGATE_START;
@@ -258,18 +258,21 @@ const isLineBreak = (
   position: number,
   current: number
 ): boolean =>
-  current === LF || (current === CR && source.charCodeAt(position + 1) === LF);
+  current === LINE_FEED ||
+  (current === CARRIAGE_RETURN &&
+    source.charCodeAt(position + 1) === LINE_FEED);
 
 const isExponentMarker = (code: number): boolean =>
-  code === CHAR_e || code === CHAR_E;
+  code === LOWERCASE_E || code === UPPERCASE_E;
 
 const stripUnderscores = (digits: string): string =>
-  digits.includes('_') ? digits.replace(/_/g, '') : digits;
+  digits.includes('_') ? digits.replaceAll('_', '') : digits;
 
-const hexCode = (codePoint: number): string =>
+const toHexadecimal = (codePoint: number): string =>
   codePoint.toString(16).toUpperCase().padStart(4, '0');
 
-const codePointName = (codePoint: number): string => `U+${hexCode(codePoint)}`;
+const codePointName = (codePoint: number): string =>
+  `U+${toHexadecimal(codePoint)}`;
 
 const echoCharacter = (character: string): string => {
   if (HIDDEN_CHARACTER.test(character))
@@ -319,7 +322,7 @@ const fail = (
   let column = 1;
 
   for (let cursor = 0; cursor < offset; cursor++) {
-    if (source.charCodeAt(cursor) === LF) {
+    if (source.charCodeAt(cursor) === LINE_FEED) {
       line++;
       column = 1;
     } else {
@@ -367,7 +370,7 @@ const failForbiddenCharacter = (
 
   const alternative =
     container === 'string'
-      ? `, or write it as \\u${hexCode(current)} inside "double quotes"`
+      ? `, or write it as \\u${toHexadecimal(current)} inside "double quotes"`
       : '';
 
   return fail(
@@ -454,11 +457,11 @@ const failUnterminatedInlineTable = (
     start
   );
 
-const failInheritedKeyTable = (state: ParserState, key: string): never =>
+const failTableUnsafeKey = (state: ParserState, key: string): never =>
   fail(
     state,
     'INVALID_KEY',
-    `${quoteInput(key)} can't hold a table, because merging the result into another object could change a built-in shared by the whole program. Give it a plain value, or rename it.`,
+    `${quoteInput(key)} can't hold a table, because merging the result into another object could change a built-in or a class prototype shared by the whole program. Give it a plain value, or rename it.`,
     state.lastKeyOffset
   );
 
@@ -481,12 +484,16 @@ const skipNewline = (state: ParserState): boolean => {
   const { source, position } = state;
   const current = source.charCodeAt(position);
 
-  if (current === LF) {
+  if (current === LINE_FEED) {
     state.position = position + 1;
 
     return true;
   }
-  if (current !== CR || source.charCodeAt(position + 1) !== LF) return false;
+  if (
+    current !== CARRIAGE_RETURN ||
+    source.charCodeAt(position + 1) !== LINE_FEED
+  )
+    return false;
 
   state.position = position + 2;
 
@@ -580,7 +587,7 @@ const readUnicodeEscape = (
   for (let position = start; position < end; position++) {
     const current = source.charCodeAt(position);
 
-    if (!isHexDigit(current))
+    if (!isHexadecimalDigit(current))
       fail(
         state,
         'INVALID_ESCAPE',
@@ -588,7 +595,7 @@ const readUnicodeEscape = (
         start - 2
       );
 
-    codePoint = codePoint * 16 + hexValue(current);
+    codePoint = codePoint * 16 + hexadecimalValue(current);
   }
 
   state.position = end;
@@ -617,27 +624,27 @@ const readEscape = (state: ParserState): string => {
   state.position = position + 1;
 
   switch (source.charCodeAt(position)) {
-    case CHAR_b:
+    case LOWERCASE_B:
       return '\b';
-    case CHAR_t:
+    case LOWERCASE_T:
       return '\t';
-    case CHAR_n:
+    case LOWERCASE_N:
       return '\n';
-    case CHAR_f:
+    case LOWERCASE_F:
       return '\f';
-    case CHAR_r:
+    case LOWERCASE_R:
       return '\r';
     case DOUBLE_QUOTE:
       return '"';
     case BACKSLASH:
       return '\\';
-    case CHAR_e:
+    case LOWERCASE_E:
       return '\x1B';
-    case CHAR_u:
+    case LOWERCASE_U:
       return readUnicodeEscape(state, 4, 'u');
-    case CHAR_U:
+    case UPPERCASE_U:
       return readUnicodeEscape(state, 8, 'U');
-    case CHAR_x:
+    case LOWERCASE_X:
       return readUnicodeEscape(state, 2, 'x');
     default:
       return fail(
@@ -766,7 +773,12 @@ const readMultilineString = (state: ParserState, quote: number): string => {
       parts.push(source.substring(segment, position));
       state.position = position;
 
-      if (next === LF || next === CR || next === SPACE || next === TAB) {
+      if (
+        next === LINE_FEED ||
+        next === CARRIAGE_RETURN ||
+        next === SPACE ||
+        next === TAB
+      ) {
         state.position++;
         skipWhitespace(state);
 
@@ -789,7 +801,10 @@ const readMultilineString = (state: ParserState, quote: number): string => {
 
       continue;
     }
-    if (current === CR && source.charCodeAt(position + 1) === LF) {
+    if (
+      current === CARRIAGE_RETURN &&
+      source.charCodeAt(position + 1) === LINE_FEED
+    ) {
       parts ??= [];
       parts.push(source.substring(segment, position), '\n');
       state.position = position;
@@ -799,7 +814,10 @@ const readMultilineString = (state: ParserState, quote: number): string => {
 
       continue;
     }
-    if (current !== LF && isForbiddenCharacter(source, position, current))
+    if (
+      current !== LINE_FEED &&
+      isForbiddenCharacter(source, position, current)
+    )
       failForbiddenCharacter(state, current, 'string', position);
 
     position++;
@@ -845,11 +863,11 @@ const readSimpleKey = (state: ParserState): string => {
   return readSingleLineString(state, current);
 };
 
-const refuseInheritedKeyTable = (state: ParserState, keys: string[]): void => {
+const refuseTableUnsafeKey = (state: ParserState, keys: string[]): void => {
   const lastKey = keys[keys.length - 1];
 
-  if (!state.allowUnsafeKeys && isInheritedKey(lastKey))
-    failInheritedKeyTable(state, lastKey);
+  if (!state.allowUnsafeKeys && isTableUnsafeKey(lastKey))
+    failTableUnsafeKey(state, lastKey);
 };
 
 const readKeyPart = (
@@ -883,7 +901,7 @@ const readDottedKey = (state: ParserState, maxParts: number): string[] => {
     state.position < state.length &&
     state.source.charCodeAt(state.position) === DOT
   ) {
-    refuseInheritedKeyTable(state, keys);
+    refuseTableUnsafeKey(state, keys);
     state.position++;
     skipWhitespace(state);
     keys.push(readKeyPart(state, keys.length, maxParts));
@@ -915,7 +933,7 @@ const readAssignedKey = (state: ParserState, maxParts: number): string[] => {
   readEqualsSign(state);
 
   if (state.source.charCodeAt(state.position) === LEFT_BRACE)
-    refuseInheritedKeyTable(state, keys);
+    refuseTableUnsafeKey(state, keys);
 
   return keys;
 };
@@ -964,10 +982,7 @@ const readTwoDigits = (source: string, position: number): number =>
 
 const validateDate = (state: ParserState, offset: number): void => {
   const { source } = state;
-  const year =
-    readTwoDigits(source, offset) * 100 + readTwoDigits(source, offset + 2);
   const month = readTwoDigits(source, offset + 5);
-  const day = readTwoDigits(source, offset + 8);
 
   if (month < 1 || month > 12)
     fail(
@@ -977,6 +992,9 @@ const validateDate = (state: ParserState, offset: number): void => {
       offset
     );
 
+  const year =
+    readTwoDigits(source, offset) * 100 + readTwoDigits(source, offset + 2);
+  const day = readTwoDigits(source, offset + 8);
   let maxDay = MAX_DAYS[month - 1];
 
   if (month === 2 && ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0))
@@ -998,9 +1016,6 @@ const validateTime = (
 ): void => {
   const { source } = state;
   const hour = readTwoDigits(source, timeStart);
-  const minute = readTwoDigits(source, timeStart + 3);
-  const second =
-    clockLength === FULL_TIME_LENGTH ? readTwoDigits(source, timeStart + 6) : 0;
 
   if (hour > 23)
     fail(
@@ -1009,6 +1024,9 @@ const validateTime = (
       `This time doesn't exist: hour ${hour} is not between 0 and 23.`,
       offset
     );
+
+  const minute = readTwoDigits(source, timeStart + 3);
+
   if (minute > 59)
     fail(
       state,
@@ -1016,6 +1034,10 @@ const validateTime = (
       `This time doesn't exist: minute ${minute} is not between 0 and 59.`,
       offset
     );
+
+  const second =
+    clockLength === FULL_TIME_LENGTH ? readTwoDigits(source, timeStart + 6) : 0;
+
   if (second > 59)
     fail(
       state,
@@ -1032,7 +1054,6 @@ const validateTimeOffset = (state: ParserState, offset: number): void => {
   if (sign !== PLUS && sign !== DASH) return;
 
   const hour = readTwoDigits(source, offset + 1);
-  const minute = readTwoDigits(source, offset + 4);
 
   if (hour > 23)
     fail(
@@ -1041,6 +1062,9 @@ const validateTimeOffset = (state: ParserState, offset: number): void => {
       `This time zone offset doesn't exist: hour ${hour} is not between 0 and 23.`,
       offset
     );
+
+  const minute = readTwoDigits(source, offset + 4);
+
   if (minute > 59)
     fail(
       state,
@@ -1118,7 +1142,7 @@ const scanTimeOffset = (state: ParserState): boolean => {
   const { source, position } = state;
   const current = source.charCodeAt(position);
 
-  if (current === CHAR_Z || current === CHAR_z) {
+  if (current === UPPERCASE_Z || current === LOWERCASE_Z) {
     state.position = position + 1;
 
     return true;
@@ -1149,9 +1173,9 @@ const toInstant = (
   const zone = source.charCodeAt(offsetStart);
 
   if (
-    source.charCodeAt(timeStart - 1) === CHAR_T &&
+    source.charCodeAt(timeStart - 1) === UPPERCASE_T &&
     clockLength === FULL_TIME_LENGTH &&
-    zone !== CHAR_z
+    zone !== LOWERCASE_Z
   )
     return text;
 
@@ -1160,7 +1184,7 @@ const toInstant = (
       ? source.substring(timeStart, offsetStart)
       : `${source.substring(timeStart, timeStart + SHORT_TIME_LENGTH)}:00${source.substring(timeStart + SHORT_TIME_LENGTH, offsetStart)}`;
   const timeOffset =
-    zone === CHAR_Z || zone === CHAR_z
+    zone === UPPERCASE_Z || zone === LOWERCASE_Z
       ? 'Z'
       : source.substring(offsetStart, offsetStart + NUMERIC_OFFSET_LENGTH);
 
@@ -1186,8 +1210,8 @@ const tryReadDateOrTime = (
   const afterDate = start + DATE_LENGTH;
   const delimiter = source.charCodeAt(afterDate);
   const hasTime =
-    delimiter === CHAR_T ||
-    delimiter === CHAR_t ||
+    delimiter === UPPERCASE_T ||
+    delimiter === LOWERCASE_T ||
     (delimiter === SPACE && isDigit(source.charCodeAt(afterDate + 1)));
 
   if (!hasTime) {
@@ -1237,18 +1261,18 @@ const tryReadSpecialFloat = (state: ParserState): number | undefined => {
   const first = source.charCodeAt(start);
 
   if (
-    first === CHAR_i &&
-    source.charCodeAt(start + 1) === CHAR_n &&
-    source.charCodeAt(start + 2) === CHAR_f
+    first === LOWERCASE_I &&
+    source.charCodeAt(start + 1) === LOWERCASE_N &&
+    source.charCodeAt(start + 2) === LOWERCASE_F
   ) {
     state.position = start + 3;
 
     return sign === DASH ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;
   }
   if (
-    first === CHAR_n &&
-    source.charCodeAt(start + 1) === CHAR_a &&
-    source.charCodeAt(start + 2) === CHAR_n
+    first === LOWERCASE_N &&
+    source.charCodeAt(start + 1) === LOWERCASE_A &&
+    source.charCodeAt(start + 2) === LOWERCASE_N
   ) {
     state.position = start + 3;
 
@@ -1364,9 +1388,9 @@ const readDecimalInteger = (
 };
 
 const prefixedIntegerRule = (prefix: number): DigitRule | undefined => {
-  if (prefix === CHAR_x) return HEXADECIMAL;
-  if (prefix === CHAR_o) return OCTAL;
-  if (prefix === CHAR_b) return BINARY;
+  if (prefix === LOWERCASE_X) return HEXADECIMAL;
+  if (prefix === LOWERCASE_O) return OCTAL;
+  if (prefix === LOWERCASE_B) return BINARY;
 
   return undefined;
 };
@@ -1480,9 +1504,9 @@ const readTrue = (state: ParserState): boolean => {
   const { source, position } = state;
 
   if (
-    source.charCodeAt(position + 1) !== CHAR_r ||
-    source.charCodeAt(position + 2) !== CHAR_u ||
-    source.charCodeAt(position + 3) !== CHAR_e
+    source.charCodeAt(position + 1) !== LOWERCASE_R ||
+    source.charCodeAt(position + 2) !== LOWERCASE_U ||
+    source.charCodeAt(position + 3) !== LOWERCASE_E
   )
     failInvalidValue(state);
 
@@ -1495,10 +1519,10 @@ const readFalse = (state: ParserState): boolean => {
   const { source, position } = state;
 
   if (
-    source.charCodeAt(position + 1) !== CHAR_a ||
-    source.charCodeAt(position + 2) !== CHAR_l ||
-    source.charCodeAt(position + 3) !== CHAR_s ||
-    source.charCodeAt(position + 4) !== CHAR_e
+    source.charCodeAt(position + 1) !== LOWERCASE_A ||
+    source.charCodeAt(position + 2) !== LOWERCASE_L ||
+    source.charCodeAt(position + 3) !== LOWERCASE_S ||
+    source.charCodeAt(position + 4) !== LOWERCASE_E
   )
     failInvalidValue(state);
 
@@ -1514,16 +1538,16 @@ const readValue = (state: ParserState, depth: number): unknown => {
 
   if (current === DOUBLE_QUOTE || current === SINGLE_QUOTE)
     return readString(state, current);
-  if (current === CHAR_t) return readTrue(state);
-  if (current === CHAR_f) return readFalse(state);
+  if (current === LOWERCASE_T) return readTrue(state);
+  if (current === LOWERCASE_F) return readFalse(state);
   if (current === LEFT_BRACKET) return readArray(state, depth);
   if (current === LEFT_BRACE) return readInlineTable(state, depth);
   if (
     isDigit(current) ||
     current === PLUS ||
     current === DASH ||
-    current === CHAR_i ||
-    current === CHAR_n
+    current === LOWERCASE_I ||
+    current === LOWERCASE_N
   )
     return readNumberOrDate(state);
   if (isBareKeyCharacter(current)) failInvalidValue(state);
@@ -1532,14 +1556,13 @@ const readValue = (state: ParserState, depth: number): unknown => {
 };
 
 const readArray = (state: ParserState, depth: number): unknown[] => {
-  const { source } = state;
-  const start = state.position;
-
   if (depth > state.maxDepth) failTooDeep(state);
 
-  state.position++;
-
+  const { source } = state;
+  const start = state.position;
   const result: unknown[] = [];
+
+  state.position++;
 
   while (true) {
     skipBlanks(state);
@@ -1636,14 +1659,13 @@ const readInlineTable = (
   state: ParserState,
   depth: number
 ): Record<string, unknown> => {
-  const { source } = state;
-  const start = state.position;
-
   if (depth > state.maxDepth) failTooDeep(state);
 
-  state.position++;
-
+  const { source } = state;
+  const start = state.position;
   const table: Record<string, unknown> = Object.create(null);
+
+  state.position++;
 
   while (true) {
     skipBlanks(state);
@@ -1693,7 +1715,6 @@ const ensureDottedParent = (
   for (let index = 0; index < lastIndex; index++) {
     const key = keys[index];
     const existing = target[key];
-    const known = meta.children[key];
 
     if (existing === undefined) {
       const created: Record<string, unknown> = Object.create(null);
@@ -1705,6 +1726,9 @@ const ensureDottedParent = (
 
       continue;
     }
+
+    const known = meta.children[key];
+
     if (known === undefined || Array.isArray(existing))
       return failAlreadySet(
         state,
@@ -1873,8 +1897,8 @@ const addTableArray = (
 
   const table: Record<string, unknown> = Object.create(null);
 
-  if (existing === undefined) parent[lastKey] = [table];
-  else (existing as unknown[]).push(table);
+  if (Array.isArray(existing)) existing.push(table);
+  else parent[lastKey] = [table];
 
   state.context = table;
   state.contextKeys = keys;
@@ -1900,7 +1924,7 @@ const readTableHeader = (state: ParserState): void => {
     isArrayTable ? state.maxDepth - 1 : state.maxDepth
   );
 
-  if (!isArrayTable) refuseInheritedKeyTable(state, keys);
+  if (!isArrayTable) refuseTableUnsafeKey(state, keys);
 
   skipWhitespace(state);
 
@@ -1994,7 +2018,8 @@ export const parse = <T = unknown>(
       `maxDepth must be an integer from 0 to ${MAX_DEPTH_CEILING}`
     );
 
-  const source = input.charCodeAt(0) === BOM ? input.slice(1) : input;
+  const source =
+    input.charCodeAt(0) === BYTE_ORDER_MARK ? input.slice(1) : input;
   const root: Record<string, unknown> = Object.create(null);
   const metaRoot = new TableMeta();
   const state: ParserState = {

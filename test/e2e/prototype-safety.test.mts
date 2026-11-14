@@ -1,5 +1,10 @@
 import { describe, it, strict } from 'poku';
-import { TomlError, assertParsesTo, parse } from '../__helpers__/index.mts';
+import {
+  TomlError,
+  assertParsesTo,
+  parse,
+  parseUnchecked,
+} from '../__helpers__/index.mts';
 
 type Route = {
   name: string;
@@ -18,9 +23,9 @@ type HeldValue = {
   expected: (key: string) => unknown;
 };
 
-const INERT_KEYS = ['prototype'];
 const TABLE_UNSAFE_KEYS = [
   'constructor',
+  'prototype',
   'toString',
   'valueOf',
   'hasOwnProperty',
@@ -46,7 +51,11 @@ const LOOKALIKE_KEYS = [
   'Constructor',
   'constructors',
   ' constructor',
+  'Prototype',
+  'prototypes',
+  ' prototype',
 ];
+const BUILT_IN_METHOD_KEYS = ['call', 'bind', 'apply', 'slice'];
 
 const HELD_VALUES: HeldValue[] = [
   {
@@ -105,8 +114,6 @@ const SPELLINGS: Spelling[] = [
     write: (key) => `"\\x${key.charCodeAt(0).toString(16)}${key.slice(1)}"`,
   },
 ];
-
-const parseUnchecked = parse as (input: string, options: unknown) => unknown;
 
 const assertPrototypeUntouched = (): void => {
   const fresh: Record<string, unknown> = {};
@@ -224,14 +231,6 @@ describe('Prototype safety', () => {
     for (const spelling of SPELLINGS) {
       const unsafeKeys = route.holdsTable ? UNSAFE_KEYS : ['__proto__'];
 
-      for (const key of INERT_KEYS)
-        it(`keeps ${key} written ${spelling.name} as an ordinary own key in ${route.name}`, () => {
-          const result = parse(route.source(spelling.write(key)));
-
-          assertOwnPath(result, route.path(key));
-          assertPrototypeUntouched();
-        });
-
       for (const key of unsafeKeys) {
         it(`refuses ${key} written ${spelling.name} in ${route.name}`, () =>
           strict.throws(
@@ -283,4 +282,8 @@ describe('Prototype safety', () => {
   for (const key of LOOKALIKE_KEYS)
     it(`keeps the lookalike "${key}" as an ordinary own key`, () =>
       assertOwnPath(parse(`"${key}".polluted = true`), [key, 'polluted']));
+
+  for (const key of BUILT_IN_METHOD_KEYS)
+    it(`keeps the built-in method name ${key} holding a table as an ordinary own key`, () =>
+      assertOwnPath(parse(`${key}.polluted = true`), [key, 'polluted']));
 });

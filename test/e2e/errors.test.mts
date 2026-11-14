@@ -4,7 +4,7 @@ import { Buffer } from 'node:buffer';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TomlError, parse } from '../__helpers__/index.mts';
+import { TomlError, parse, parseUnchecked } from '../__helpers__/index.mts';
 
 type CodeCase = {
   code: TomlErrorCode;
@@ -110,7 +110,7 @@ describe('Error codes', () => {
   for (const { name, input } of nonStrings)
     it(`reports a TypeError, not a TomlError, for ${name} instead of a string`, () =>
       strict.throws(
-        () => (parse as (input: unknown) => unknown)(input),
+        () => parseUnchecked(input),
         (error) => error instanceof TypeError && !(error instanceof TomlError)
       ));
 

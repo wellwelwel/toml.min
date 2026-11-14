@@ -1,6 +1,11 @@
 import type { Rejection } from '../__helpers__/index.mts';
 import { describe, it, strict } from 'poku';
-import { assertParsesTo, parse, read } from '../__helpers__/index.mts';
+import {
+  assertParsesTo,
+  parse,
+  parseUnchecked,
+  read,
+} from '../__helpers__/index.mts';
 
 describe('Numbers', () => {
   it('reads signed, unsigned and underscored integers', () =>
@@ -165,10 +170,6 @@ describe('BigInt integers', () => {
     '9'.repeat(200_000),
   ];
   const notEnabling: unknown[] = ['true', 'false', 1];
-  const parseLoosely = parse as (
-    input: string,
-    options: { bigint?: unknown }
-  ) => Record<string, unknown>;
 
   it('reads the whole 64-bit range exactly', () => {
     const result = parse<Record<string, bigint>>(
@@ -204,7 +205,7 @@ describe('BigInt integers', () => {
 
   for (const value of notEnabling)
     it(`keeps integers as numbers when bigint is ${JSON.stringify(value)}`, () =>
-      strict.equal(parseLoosely('a = 1', { bigint: value }).a, 1));
+      strict.equal(parseUnchecked('a = 1', { bigint: value }).a, 1));
 
   for (const prefix of ['0x', '0o', '0b'])
     it(`accepts ${prefix} integers padded with leading zeros`, () =>

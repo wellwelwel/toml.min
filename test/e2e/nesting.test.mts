@@ -1,6 +1,6 @@
 import type { ParseOptions } from '../../src/index.ts';
 import { describe, it, strict } from 'poku';
-import { parse } from '../__helpers__/index.mts';
+import { parse, parseUnchecked } from '../__helpers__/index.mts';
 
 type NestingSource = { name: string; build: (levels: number) => string };
 
@@ -148,10 +148,6 @@ describe('Nesting depth option', () => {
     Number.POSITIVE_INFINITY,
     '10',
   ];
-  const parseLoosely = parse as (
-    input: string,
-    options?: { maxDepth?: unknown }
-  ) => unknown;
 
   it('lowers the limit', () =>
     strict.throws(() => parse('a = [[[]]]', { maxDepth: 2 }), {
@@ -187,7 +183,7 @@ describe('Nesting depth option', () => {
   for (const limit of invalidLimits)
     it(`refuses the ${typeof limit} ${String(limit)} as a limit`, () =>
       strict.throws(
-        () => parseLoosely('a = 1', { maxDepth: limit }),
+        () => parseUnchecked('a = 1', { maxDepth: limit }),
         TypeError
       ));
 });

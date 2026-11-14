@@ -15,6 +15,10 @@ export const {
   LocalDateOrTime,
   OffsetDateTime,
 }: typeof import('../../src/index.ts') = require('../../src/index.ts');
+export const parseUnchecked = parse as (
+  input: unknown,
+  options?: Record<string, unknown>
+) => Record<string, unknown>;
 
 const isTable = (value: unknown): value is Record<string, unknown> => {
   if (value === null || typeof value !== 'object') return false;
