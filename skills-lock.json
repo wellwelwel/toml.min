@@ -1,23 +1,83 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
     "engineering": {
       "source": "wellwelwel/skills",
       "sourceType": "github",
       "skillPath": "skills/development/engineering/SKILL.md",
-      "computedHash": "0ca0995289f46a5b7fbd4fe42d37df4dccc4d167e1b29a8642e8739fe9bc1553"
+      "computedHash": "e6044c9bdb37bad54cefd2e68b88e5b2f459a4c9ce609cc940fadf3074a9e0ad"
+    },
+    "lagune": {
+      "source": "wellwelwel/lagune",
+      "sourceType": "github",
+      "skillPath": "skills/lagune/SKILL.md",
+      "computedHash": "b054a969cf27b5bce86a24c664e27e87c2d35f6ab3ab905181c2ef632905c807"
+    },
+    "lagune-charter": {
+      "source": "wellwelwel/lagune",
+      "sourceType": "github",
+      "skillPath": "skills/lagune-charter/SKILL.md",
+      "computedHash": "56fa561b09bca2416440683e28d626edf85bbc27140acf31852720e7cc399c93"
+    },
+    "lagune-detect": {
+      "source": "wellwelwel/lagune",
+      "sourceType": "github",
+      "skillPath": "skills/lagune-detect/SKILL.md",
+      "computedHash": "1138cab468f52de85799869d7af2f9dbeb0ad267574707152616b77bd50dc760"
+    },
+    "lagune-harden": {
+      "source": "wellwelwel/lagune",
+      "sourceType": "github",
+      "skillPath": "skills/lagune-harden/SKILL.md",
+      "computedHash": "643e7c6c11c3493b7fed1be781d169f4335ec03141b2887f6912baa81ba53d7f"
+    },
+    "lagune-plan": {
+      "source": "wellwelwel/lagune",
+      "sourceType": "github",
+      "skillPath": "skills/lagune-plan/SKILL.md",
+      "computedHash": "209be15165467acf7e55fcdcc776dadabff3f4bf70c9e2085da89773820ee21b"
+    },
+    "lagune-prove": {
+      "source": "wellwelwel/lagune",
+      "sourceType": "github",
+      "skillPath": "skills/lagune-prove/SKILL.md",
+      "computedHash": "00a5cc7acfe49ede979813524a1be1932e973a530d23168175680e11c914d535"
+    },
+    "lagune-repair": {
+      "source": "wellwelwel/lagune",
+      "sourceType": "github",
+      "skillPath": "skills/lagune-repair/SKILL.md",
+      "computedHash": "6bf964ee9064854d408e9ec79e38f97fc26e270726838097bd4e8fd59f1fb366"
+    },
+    "lagune-specialize": {
+      "source": "wellwelwel/lagune",
+      "sourceType": "github",
+      "skillPath": "skills/lagune-specialize/SKILL.md",
+      "computedHash": "65cc4bb51be09e92dcd2b70798427339386fb42a046c70318920cbd509dc5087"
+    },
+    "lagune-verify": {
+      "source": "wellwelwel/lagune",
+      "sourceType": "github",
+      "skillPath": "skills/lagune-verify/SKILL.md",
+      "computedHash": "25ebaec20d7ee078094eeffa3c5555dbc197455e03109dc9aa9fb7f7c313702d"
+    },
+    "refine": {
+      "source": "wellwelwel/skills",
+      "sourceType": "github",
+      "skillPath": "skills/development/refine/SKILL.md",
+      "computedHash": "e9159c3beffe3139697912dc9562860f4738fd5996c68ff7fea2f78dd26950e3"
     },
     "testing": {
       "source": "wellwelwel/skills",
       "sourceType": "github",
       "skillPath": "skills/development/testing/SKILL.md",
-      "computedHash": "fedab54bc835e4b1a3f7fc2ce91fae053adf946f2ec6360bbd065e45eac744aa"
+      "computedHash": "1f2339da8d640da04502f28313be40b3e394909c290b93bc46b179889850fb50"
     },
     "writer": {
       "source": "wellwelwel/skills",
       "sourceType": "github",
       "skillPath": "skills/texts/writer/SKILL.md",
-      "computedHash": "9c145f6b619de88503d1505a322aa7a981ed4e241eca2601e1994bbc6092ab7e"
+      "computedHash": "d182ec93ce2df0d82cf9f3a45f3f84f5b9d94958d93d7451d3e018fb3df628e1"
     }
   }
 }

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://lagune.ai/schemas/configs.json",
+  "categories": [
+    "owasp",
+    "javascript"
+  ]
+}
