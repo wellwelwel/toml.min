@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/wellwelwel/toml.min/compare/v2.0.0...v2.0.1) (2026-11-14)
+
+
+### Bug Fixes
+
+* refuse prototype keys holding a table ([7f613ae](https://github.com/wellwelwel/toml.min/commit/7f613ae85046f190fddb81b2409269cfa7a1faf4))
+
 ## [2.0.0](https://github.com/wellwelwel/toml.min/compare/v1.0.0...v2.0.0) (2026-10-23)
 
 
